@@ -86,7 +86,28 @@ class Room:
         
         # Handle NPC interaction
         print(f"\n👤 You encounter {npc_name}")
-        npc_system.interact_with_npc(npc_name, player)
+        interaction_result = npc_system.interact_with_npc(npc_name)
+        
+        if "error" in interaction_result:
+            print(interaction_result["error"])
+        else:
+            print(f"\n{interaction_result['dialogue']}")
+            
+            if interaction_result["choices"]:
+                print("\nOptions:")
+                for i, choice in enumerate(interaction_result["choices"], 1):
+                    print(f"[{i}] {choice}")
+                
+                choice_input = input("Choose: ").strip()
+                try:
+                    choice_num = int(choice_input)
+                    if 1 <= choice_num <= len(interaction_result["choices"]):
+                        chosen = interaction_result["choices"][choice_num - 1]
+                        print(f"\nYou: \"{chosen}\"")
+                        # Track choice in memory
+                        memory_engine.update_npc_interaction(npc_name, "choice", chosen)
+                except ValueError:
+                    print("Invalid choice.")
         
         return {"continue": True, "events": ["npc_interaction"]}
     

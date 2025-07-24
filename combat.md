@@ -8,7 +8,7 @@
 ## ⏳ TIMED INPUT SYSTEM
 
 * All combat choices (during fights only) use a visible timer
-* Default window: **3 seconds** (configurable later)
+* Default window: **10 seconds** (balanced for strategic thinking)
 * Options presented as numbered list:
 
   ```

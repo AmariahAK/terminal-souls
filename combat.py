@@ -203,7 +203,7 @@ class CombatSystem:
     """Main combat system with timed mechanics and memory integration"""
     
     def __init__(self):
-        self.timer = TimedInput(3.0)  # 3 second timer as specified
+        self.timer = TimedInput(10.0)  # 10 second timer for better playability
         self.current_enemy = None
         self.combat_log = []
         self.turn_count = 0

@@ -25,7 +25,7 @@ python game.py
 ### Core Mechanics
 
 - **No saves.** Death resets your progress but not your memory footprint
-- **Timed combat.** You have 3 seconds to make decisions in fights
+- **Timed combat.** You have 10 seconds to make decisions in fights
 - **Memory-driven AI.** Enemies learn your patterns and counter them
 - **Adaptive NPCs.** Characters remember how you treat them across runs
 - **5 floors of descent.** Each floor represents deeper corruption
@@ -41,7 +41,7 @@ python game.py
 - **Ashlight Currency:** Spend enemy essence to level stats
 
 ### ⚔️ Combat System
-- **Timed Input:** 3-second decision windows
+- **Timed Input:** 10-second decision windows
 - **Stamina Management:** Every action costs endurance
 - **Weapon Variety:** From Greatblades to Bonk Sticks
 - **Memory Punishment:** Overuse patterns and face consequences
