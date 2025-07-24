@@ -1,102 +1,87 @@
-# 📂 TERMINAL SOULS: The Entity — Project Structure & Setup Guide
+# 📂 TERMINAL SOULS: The Entity — Project Structure & AMP Setup Guide
 
-> A terminal-based roguelike that learns you.
-> Built in Python. No visuals. Just pain.
+> A terminal-based, lore-heavy roguelike game built in Python. Pure text. Pure pain. Inspired by Soulsborne difficulty and the weight of choices. AMP's job is to make it feel alive.
 
 ---
 
-## 🧱 Folder Structure
+## ⚡ CORE CONCEPT
+
+* No graphics. Pure terminal.
+* Player dies often. The game **remembers**.
+* Death is learning. Memory is the enemy.
+* Dark fantasy + forgotten technology themes.
+* The game's personality comes from dynamic NPCs, memory adaptation, and permanent consequences.
+
+---
+
+## 🛠️ PROJECT STRUCTURE
 
 ```
 terminal_souls/
-├── game.py              # Main game loop and CLI logic
-├── player.py            # Player class, stats, decision logic
-├── combat.py            # Combat system + enemy logic
-├── room.py              # Procedural room generation + encounters
-├── entity.py            # Memory engine that learns player behavior
+├── game.py              # Main game loop
+├── player.py            # Player class, stats, logic
+├── combat.py            # Combat + enemy logic
+├── room.py              # Procedural encounters
+├── entity.py            # Memory engine (adapts to player)
+├── npc.py               # AMP-generated NPC system
 ├── memory/
-│   └── entity.json      # Memory DB (generated during gameplay)
+│   └── entity.json      # Player behavior memory
 ├── lore/
-│   ├── whispers.txt     # Cryptic in-game text lines
-│   └── endings.md       # Hidden endings (not shown until unlocked)
+│   ├── whispers.txt     # Cryptic in-game text
+│   ├── endings.md       # Hidden endings
+│   └── chapters/        # Lore unlocks by progress/death
 ├── utils.py             # Helper functions
-├── README.md            # Game overview and instructions
-└── instructions.md      # This file
+├── README.md            # Game overview and AMP setup
+├── instructions.md      # Master doc for AMP
+├── npc.md               # NPC logic, moods, memory integration
+├── player.md            # Player stats, classes, and leveling
+├── enemies.md           # Mob types, memory behaviors
+├── bosses.md            # Bosses, phases, dialogue, mechanics
+├── floors.md            # Floor structure, hazards, pacing
+├── combat.md            # Timed mechanics, weapons, skills
+└── memory_engine.md     # entity.json spec and usage
 ```
 
 ---
 
-## 🛠️ Setup Instructions
+## 🔍 AMP MUST READ & USE:
 
-### 🔽 Clone & Run
+AMP must use each modular `.md` doc to generate fully adaptive systems:
 
-```bash
-git clone https://github.com/yourusername/terminal_souls.git
-cd terminal_souls
-python3 game.py
-```
-
----
-
-## ⚙️ Game Flow (Day 1 Prototype)
-
-1. **Startup:** Player selects class (e.g., Knight, Mage, Rogue)
-2. **Room generation:** Randomized (with patterns stored over time)
-3. **Combat begins:** Enemies spawn with types & behavior
-4. **Entity learns:** Player's dodge, attack, item habits stored
-5. **Adaptive behavior:** Next run, enemy behaviors change based on your past play
+* `npc.md` — Dialogue, moods, reactions, betrayal mechanics
+* `player.md` — Stats, class logic, leveling, skills
+* `enemies.md` — Mob pools, evolution logic, memory adaptation
+* `bosses.md` — Boss AI, phases, behavior triggers
+* `floors.md` — Floor-by-floor structure, hazards, NPCs
+* `combat.md` — Turn structure, stamina, weapon and skill combat
+* `memory_engine.md` — How entity.json tracks and fuels the world
 
 ---
 
-## 🧠 Memory Engine (entity.py)
+## 🔥 DESIGN CORE
 
-* Stores player habits in `memory/entity.json`
-* Tracks most-used classes, combat actions, dodge patterns, stat biases
-* Provides APIs to pull biases and generate enemy counters
-
----
-
-## 🧪 For AMP / AI Co-Dev Instructions
-
-### 🔄 CLI Build Plan:
-
-* Convert game.py into a CLI tool later (`terminal-souls`)
-* Add a config system (e.g., `~/.config/terminal_souls/config.json`)
-* Make game auto-update via Git (optional)
-
-### 📦 Future Plans:
-
-* `pip install .` support (can be turned into a local package)
-* Local scoreboard using SQLite
-* Steam CLI version (way later if we dare 👀)
+* **No saves.** Death = reset.
+* **No handholding.** Failure reveals story.
+* **Everything adapts.** Enemies, bosses, NPCs.
+* **Lore is reactive.** Even dialogue evolves.
+* **Memory is weaponized.** The game learns your habits and uses them against you.
 
 ---
 
-## 🤝 Contribution Ideas
+## 🧼 WHAT AMP MUST DO
 
-* Room modifiers (fog, poison gas, cursed floor)
-* New enemy archetypes (Memory Eater, Phase Beast)
-* Multi-choice lore events ("Do you drink the void wine?")
-* Class-specific dialogue
-
----
-
-## 💬 Example Entity Dialogue
-
-```
-"You always dodge left. That won’t save you again."
-"You return… I remember. And I’ve learned."
-"Mage again? Predictable."
-```
+1. Build the dynamic `npc.py` system using `npc.md`
+2. Implement player stats, leveling, skills from `player.md`
+3. Create floor layouts, hazard logic, and encounter structure via `floors.md`
+4. Populate adaptive enemies using `enemies.md` and memory data
+5. Program boss behavior, phase changes, and personality from `bosses.md`
+6. Handle all combat interaction with timed input from `combat.md`
+7. Build and manage `entity.json` as per `memory_engine.md`
+8. Ensure every component pulls from player memory
+9. Add lore unlocking mechanics through `/lore/chapters/`
+10. Make the experience harsh, reactive, and **memorable**
 
 ---
 
-## 🧾 Notes
-
-* **No AI APIs used**, all logic is randomizer-based + memory file tracking
-* Dark Souls difficulty. No handholding.
-* Failure is how you learn. Entity punishes familiarity.
-
----
-
-> *“Not every demon screams. Some just watch. And remember.”*
+> Terminal Souls is not about victory. It's about being *seen*.
+> AMP must create a terminal world that remembers you better than you remember yourself.
