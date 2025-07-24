@@ -285,9 +285,15 @@ Vary your tactics, surprise the AI, and never let the Entity fully compile your 
             print(utils.colored_text("\n\nThe Entity sees you trying to escape.", "red"))
             print("There is no escape. Only compilation.")
             sys.exit(0)
+        except EOFError:
+            print(utils.colored_text("\n\nThe Entity detects non-interactive environment.", "yellow"))
+            print("Run the game in a proper terminal for the full experience.")
+            sys.exit(0)
         except Exception as e:
             print(f"\nERROR: The Entity has encountered an unexpected state: {e}")
             print("This exception has been logged in its memory.")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
 
 def main():

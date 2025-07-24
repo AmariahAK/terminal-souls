@@ -27,6 +27,28 @@ def colorize(text: str, color: str) -> str:
     """Apply color to text"""
     return f"{color}{text}{Colors.END}"
 
+def colored_text(text: str, color: str) -> str:
+    """Apply color to text using color names"""
+    color_map = {
+        "red": Colors.RED,
+        "green": Colors.GREEN,
+        "yellow": Colors.YELLOW,
+        "blue": Colors.BLUE,
+        "purple": Colors.PURPLE,
+        "cyan": Colors.CYAN,
+        "white": Colors.WHITE,
+        "gray": Colors.GRAY,
+        "grey": Colors.GRAY,
+        "bold": Colors.BOLD,
+        "underline": Colors.UNDERLINE,
+        "magenta": Colors.PURPLE,
+        "italic": Colors.GRAY,  # Use gray for italic since ANSI italic isn't widely supported
+        "gold": Colors.YELLOW   # Use yellow for gold
+    }
+    
+    color_code = color_map.get(color.lower(), Colors.WHITE)
+    return f"{color_code}{text}{Colors.END}"
+
 def bold(text: str) -> str:
     """Make text bold"""
     return f"{Colors.BOLD}{text}{Colors.END}"
@@ -114,6 +136,21 @@ def clear_screen():
 def pause(message: str = "Press Enter to continue..."):
     """Pause execution until user presses Enter"""
     input(message)
+
+def wait_for_enter(message: str = "Press Enter to continue..."):
+    """Wait for user to press Enter"""
+    input(message)
+
+def wait(seconds: float):
+    """Wait for specified number of seconds"""
+    time.sleep(seconds)
+
+def slow_type(text: str, delay: float = 0.05):
+    """Type text slowly with delay between characters"""
+    for char in text:
+        print(char, end='', flush=True)
+        time.sleep(delay)
+    print()
 
 def print_slowly(text: str, delay: float = 0.03):
     """Print text character by character with delay"""
