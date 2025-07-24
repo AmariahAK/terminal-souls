@@ -1,0 +1,84 @@
+{
+  "class_selected": "Knight",
+  "class_history": [],
+  "stat_spread": {
+    "STR": 0,
+    "DEX": 0,
+    "INT": 0,
+    "FTH": 0,
+    "END": 0,
+    "VIT": 0
+  },
+  "most_used_weapon": "",
+  "dodge_left_count": 6,
+  "dodge_right_count": 0,
+  "item_usage_count": 0,
+  "repeat_action_count": 0,
+  "passive_behavior_score": 0.0,
+  "aggressive_behavior_score": 0.0,
+  "skills_unlocked": [],
+  "npc_interaction_log": {
+    "Lorekeeper": {
+      "visits": 0,
+      "insults": 0,
+      "choices": [],
+      "mood": "Neutral"
+    },
+    "Blacktongue": {
+      "visits": 2,
+      "upgrades_requested": 0,
+      "mood": "Neutral"
+    },
+    "Ash Sister": {
+      "visits": 3,
+      "riddles_answered": 0,
+      "insulted": false,
+      "mood": "Neutral",
+      "choices": [
+        "request_riddle",
+        "request_riddle",
+        "betray"
+      ]
+    },
+    "Faceless Merchant": {
+      "visits": 0,
+      "underpaid": 0,
+      "ignored": 0,
+      "mood": "Neutral"
+    },
+    "Still Flame Warden": {
+      "visits": 0,
+      "mood": "Neutral"
+    },
+    "The Hollowed": {
+      "visits": 2,
+      "reflected_build": false,
+      "mood": "Neutral"
+    },
+    "The Lorekeeper": {
+      "visits": 7,
+      "mood": "Neutral",
+      "choices": [
+        "request_lore",
+        "request_lore",
+        "leave",
+        "leave",
+        "leave",
+        "leave"
+      ]
+    }
+  },
+  "boss_defeat_order": [],
+  "deaths_per_boss": {},
+  "floors_cleared": 3,
+  "times_restarted": 10,
+  "weapon_usage_history": {},
+  "betrayals": [
+    {
+      "npc": "Ash Sister",
+      "type": "direct_challenge",
+      "run": 10
+    }
+  ],
+  "lore_unlocked": []
+}

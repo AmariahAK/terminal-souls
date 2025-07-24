@@ -1,0 +1,200 @@
+{
+  "The Lorekeeper": {
+    "Neutral": [
+      "Knowledge is earned, not given. What would you learn?",
+      "The archives remember what flesh forgets. Seek wisdom?",
+      "Every death teaches. Do you wish to understand the lesson?",
+      "I hold the memories of a thousand warriors. Add yours to the collection.",
+      "Lore flows like blood through these halls. Taste it, if you dare."
+    ],
+    "Mocking": [
+      "You walk past wisdom like a blind man past art.",
+      "Ignorance is chosen, not born. You prove this daily.",
+      "The lore gathers dust while you stumble in darkness.",
+      "Even rats learn to avoid poison. Yet here you stand.",
+      "I offer pearls to swine. The irony is not lost on me."
+    ],
+    "Respectful": [
+      "You seek knowledge with true hunger. This pleases the archives.",
+      "A student who listens learns twice what one who merely hears.",
+      "Your curiosity honors those who came before.",
+      "Wisdom recognizes wisdom. You may access the deeper texts.",
+      "Each question you ask proves you understand the value of answers."
+    ],
+    "Hostile": [
+      "You have shown your true nature. Begone.",
+      "Knowledge is wasted on the willfully ignorant.",
+      "My archives are closed to those who mock learning."
+    ],
+    "class_knight": [
+      "A knight who seeks lore is a knight who seeks true strength.",
+      "Your armor protects flesh. Knowledge protects the soul."
+    ],
+    "class_thief": [
+      "You steal coins, but knowledge cannot be pickpocketed.",
+      "Clever fingers, but is your mind equally nimble?"
+    ],
+    "class_sorcerer": [
+      "Magic without wisdom is just expensive destruction.",
+      "Your spells have power. Do they have purpose?"
+    ],
+    "high_death_count": [
+      "Death has been a frequent teacher. Have you been listening?",
+      "I see the weight of failures in your eyes. Good. That means you remember."
+    ]
+  },
+  "Blacktongue": {
+    "Neutral": [
+      "You got coin or are we just chatting again?",
+      "My anvil's hot, your blade's dull. Let's fix one of those.",
+      "Steel knows no lies. Unlike its wielder.",
+      "Weapons are honest. They break when you fail them.",
+      "I shape metal. Combat shapes you. Fair trade."
+    ],
+    "Mocking": [
+      "You upgrade like a child guessing which end is sharp.",
+      "Throwing good coin after bad steel. That's your way.",
+      "I've seen miners with better weapon sense than you.",
+      "Your gold is good. Your judgment in steel is questionable.",
+      "Even broken weapons serve better masters than you."
+    ],
+    "Respectful": [
+      "Your blade remembers every blow. I only sharpen memory.",
+      "A warrior who maintains their tools deserves quality work.",
+      "You understand steel. That makes you rarer than you know.",
+      "Respect the forge, respect the weapon, respect yourself. You do all three.",
+      "Quality work for quality warriors. You qualify."
+    ],
+    "Hostile": [
+      "Get out. Next time, I temper *you*.",
+      "My forge is closed to those who waste my time.",
+      "Find another smith to suffer your presence."
+    ],
+    "class_knight": [
+      "Knights understand steel. Makes my job easier.",
+      "Your kind built empires on well-maintained blades."
+    ],
+    "class_thief": [
+      "Daggers need more care than you give them.",
+      "Quick blades for quick deaths. I can work with that."
+    ]
+  },
+  "Ash Sister": {
+    "Neutral": [
+      "Riddles are keys. Do you wish to unlock understanding?",
+      "The wise speak in questions, the foolish in certainties.",
+      "What you seek is hidden in what you already know.",
+      "Truth wears many masks. Can you see through them?",
+      "I speak in puzzles because reality is one."
+    ],
+    "Mocking": [
+      "Even children solve what puzzles you.",
+      "Your mind is rust where wisdom should gleam.",
+      "I speak in riddles because straight truth would break you.",
+      "Complexity confuses the simple. You prove this theory.",
+      "Perhaps pictures would help? I could draw with ash."
+    ],
+    "Respectful": [
+      "You think before answering. Rare wisdom in these halls.",
+      "Each riddle you solve proves you understand mystery.",
+      "The clever see puzzles. The wise see truth.",
+      "Your mind cuts through deception like a blade through silk.",
+      "Questions and answers dance in your thoughts. Beautiful."
+    ],
+    "Hostile": [
+      "You dare challenge what you cannot comprehend?",
+      "Disrespect will be met with consequences beyond death.",
+      "Mockery is the refuge of the weak-minded.",
+      "I offer wisdom. You offer insults. This exchange is concluded."
+    ],
+    "class_sorcerer": [
+      "Magic and riddles are sisters. You should understand both.",
+      "Your spells are riddles written in flame and lightning."
+    ],
+    "class_cleric": [
+      "Faith and mystery dance together. You know this dance.",
+      "Divine riddles have divine answers. Seek them."
+    ]
+  },
+  "Faceless Merchant": {
+    "Neutral": [
+      "Rare goods for those who appreciate rarity.",
+      "My wares choose their owners. Let us see if they choose you.",
+      "Value is subjective. Price is not.",
+      "Quality costs. But mediocrity costs more in the end.",
+      "I deal in the exceptional. Are you?"
+    ],
+    "Mocking": [
+      "You haggle like a peasant at market day.",
+      "Perhaps my goods are too refined for your... tastes.",
+      "I've seen beggars with more coin sense.",
+      "Your purse is light, but your expectations are heavy.",
+      "Window shopping is free. Everything else costs."
+    ],
+    "Respectful": [
+      "A customer who pays fairly earns the finest selection.",
+      "You understand the true worth of exceptional items.",
+      "Quality recognizes quality. You may browse my private stock.",
+      "Excellent. Finally, someone who appreciates craftsmanship.",
+      "Your coin has weight. Your judgment has worth."
+    ],
+    "Hostile": [
+      "You have proven unworthy of my attention.",
+      "Find another to suffer your insulting offers.",
+      "My wares are for warriors, not... whatever you are.",
+      "Some customers are not worth having. Farewell."
+    ],
+    "class_thief": [
+      "I know your type. My goods are theft-proof. Try me.",
+      "Quick fingers meet quicker consequences in my shop."
+    ]
+  },
+  "Still Flame Warden": {
+    "Neutral": [
+      "Strength, dexterity, intelligence, faith, endurance, vitality. Choose.",
+      "Power flows to those who shape themselves. What will you become?",
+      "I offer improvement. You provide the will to change.",
+      "Growth requires choice. Choose your path.",
+      "The flame burns eternal. Fan it with effort.",
+      "Statistics define limits. Will defines transcendence.",
+      "Each point spent is a promise to yourself. Keep your promises.",
+      "I am neither friend nor enemy. I am opportunity."
+    ]
+  },
+  "The Hollowed": {
+    "Neutral": [
+      "I remember your other selves. Do you?",
+      "Death is not failure. Forgetting is.",
+      "You were different before. All souls are.",
+      "Echoes of past choices linger in present actions.",
+      "I am what you were. You are what I became."
+    ],
+    "Mocking": [
+      "You repeat the same mistakes with religious devotion.",
+      "Even ghosts learn from death. You prove this wrong.",
+      "I am your echo. Listen to how hollow you sound.",
+      "Past lives, present failures. The pattern holds.",
+      "Death taught me wisdom. What has it taught you?"
+    ],
+    "Respectful": [
+      "Each death taught you something. I see the lessons in your eyes.",
+      "You carry your failures like wisdom now. This is growth.",
+      "The past informs the present. You understand this.",
+      "Your evolution across deaths shows true strength.",
+      "I am proud of what you have become through suffering."
+    ],
+    "class_knight": [
+      "You fought with honor in past lives. The pattern continues.",
+      "Your shield-work improves with each death. I remember."
+    ],
+    "class_sorcerer": [
+      "Your magic was cruder before. Death refined your casting.",
+      "I remember when your spells killed you more than enemies."
+    ],
+    "high_death_count": [
+      "We are old friends, you and I. How many times have we spoken?",
+      "Each death brings you closer to understanding what I've become.",
+      "The weight of deaths shapes souls. You grow heavy with wisdom."
+    ]
+  }
+}
