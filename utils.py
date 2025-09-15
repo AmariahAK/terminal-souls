@@ -1,397 +1,426 @@
 import json
-import os
-import random
 import time
+import random
 import threading
-from typing import Dict, List, Any, Optional, Tuple, Union
+import sys
+import select
+import os
+from typing import Dict, List, Any, Optional
+import numpy as np
 
-# ============================================================================
-# TEXT FORMATTING UTILITIES
-# ============================================================================
+try:
+    import colorama
+    from colorama import Fore, Back, Style
+    colorama.init()
+    COLORS_AVAILABLE = True
+except ImportError:
+    COLORS_AVAILABLE = False
+    # Fallback color definitions
+    class Fore:
+        CYAN = ""
+        RED = ""
+        GREEN = ""
+        YELLOW = ""
+        MAGENTA = ""
+        WHITE = ""
+        RESET = ""
+    
+    class Back:
+        BLACK = ""
+        RED = ""
+    
+    class Style:
+        DIM = ""
+        BRIGHT = ""
+        RESET_ALL = ""
 
-class Colors:
-    """ANSI color codes for terminal output"""
-    RED = '\033[91m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    PURPLE = '\033[95m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    GRAY = '\033[90m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
+try:
+    import pygame
+    pygame.mixer.init()
+    MUSIC_AVAILABLE = True
+except ImportError:
+    MUSIC_AVAILABLE = False
 
-def colorize(text: str, color: str) -> str:
-    """Apply color to text"""
-    return f"{color}{text}{Colors.END}"
+class MusicManager:
+    """Manage background music and audio distortion"""
+    
+    def __init__(self):
+        self.music_enabled = MUSIC_AVAILABLE
+        self.current_track = None
+        self.volume = 0.3
+        self.is_playing = False
+        
+    def play_background(self, track_path: str = None):
+        """Play background music"""
+        if not self.music_enabled:
+            return
+            
+        if track_path is None:
+            track_path = "/Users/amariah/Documents/GitHub/terminal-souls/lore/music/background.mp3"
+            
+        if os.path.exists(track_path):
+            try:
+                pygame.mixer.music.load(track_path)
+                pygame.mixer.music.set_volume(self.volume)
+                pygame.mixer.music.play(-1)  # Loop indefinitely
+                self.is_playing = True
+                self.current_track = track_path
+            except pygame.error:
+                print("Warning: Could not play background music")
+        else:
+            print(f"Warning: Music file not found at {track_path}")
+    
+    def pause(self):
+        """Pause music for input"""
+        if self.music_enabled and self.is_playing:
+            pygame.mixer.music.pause()
+    
+    def unpause(self):
+        """Resume music"""
+        if self.music_enabled and self.is_playing:
+            pygame.mixer.music.unpause()
+    
+    def distort_for_sanity(self, sanity: float):
+        """Distort music based on low sanity"""
+        if not self.music_enabled:
+            return
+            
+        if sanity < 30:
+            # Lower volume and add distortion effect (volume modulation)
+            distort_volume = self.volume * (0.5 + random.uniform(0, 0.5))
+            pygame.mixer.music.set_volume(distort_volume)
+        else:
+            pygame.mixer.music.set_volume(self.volume)
 
-def colored_text(text: str, color: str) -> str:
-    """Apply color to text using color names"""
+class UIDistorter:
+    """Handle UI distortion effects for psychological horror"""
+    
+    def __init__(self):
+        self.distortion_active = False
+        self.distortion_config = {}
+        
+    def apply_distortion(self, config: Dict[str, Any]):
+        """Apply UI distortion configuration"""
+        self.distortion_active = config.get("enabled", False)
+        self.distortion_config = config
+        
+    def distort_text(self, text: str) -> str:
+        """Apply text distortion effects"""
+        if not self.distortion_active:
+            return text
+            
+        # Glitch colors for low sanity
+        if self.distortion_config.get("glitch_colors", False):
+            # Add random color codes
+            colors = [Fore.CYAN, Fore.RED, Fore.GREEN, Fore.YELLOW, Fore.MAGENTA]
+            glitched = ""
+            for char in text:
+                if random.random() < 0.1:  # 10% chance per character
+                    glitched += random.choice(colors) + char + Fore.RESET
+                else:
+                    glitched += char
+            text = glitched
+            
+        return text
+    
+    def delay_output(self):
+        """Add delay to text output"""
+        if self.distortion_active:
+            delay = self.distortion_config.get("delay_ms", 0) / 1000.0
+            if delay > 0:
+                time.sleep(random.uniform(0, delay))
+    
+    def shuffle_choices(self, choices: List[str]) -> List[str]:
+        """Shuffle choice order for confusion"""
+        if self.distortion_active and random.random() < self.distortion_config.get("shuffle_chance", 0):
+            shuffled = choices.copy()
+            random.shuffle(shuffled)
+            return shuffled
+        return choices
+    
+    def apply_phantom_input(self, user_input: str) -> str:
+        """Apply phantom input remapping"""
+        if not self.distortion_active:
+            return user_input
+            
+        if random.random() < self.distortion_config.get("phantom_chance", 0):
+            # Remap inputs
+            phantom_map = {
+                'a': 'd',  # attack -> dodge
+                'd': 'h',  # dodge -> heal  
+                'h': 'f',  # heal -> flee
+                'f': 'a'   # flee -> attack
+            }
+            return phantom_map.get(user_input, user_input)
+        
+        return user_input
+
+class NarratorFilter:
+    """Filter all game text through Entity's voice based on player state"""
+    
+    def __init__(self):
+        self.tone_bias = 0.5
+        self.player_metrics = {}
+        
+    def update_tone(self, tone_bias: float, player_metrics: Dict[str, Any]):
+        """Update narrator tone based on EntityAI output"""
+        self.tone_bias = tone_bias
+        self.player_metrics = player_metrics
+        
+    def filter_text(self, text: str, context: str = "general") -> str:
+        """Filter text through Entity's perspective"""
+        if self.tone_bias < 0.3:
+            # Respectful/eerie tone
+            if context == "combat":
+                text = f"⚔️  {text}"
+            elif context == "lore":
+                text = f"✦ {text}"
+            return text
+            
+        elif self.tone_bias < 0.7:
+            # Neutral with hints of manipulation
+            if "fail" in text.lower() or "death" in text.lower():
+                text = text.replace("You", "The wanderer")
+            return text
+            
+        else:
+            # Mocking/gaslighting tone
+            if context == "combat" and "miss" in text.lower():
+                text += " How... predictable."
+            elif context == "flee" and self.player_metrics.get("flee_count", 0) > 3:
+                text += " The paths remember your cowardice."
+            elif context == "death":
+                text = text.replace("You died", "Compiled. Again.")
+                
+        return text
+    
+    def add_whisper(self, whisper: str) -> str:
+        """Add Entity whisper to text"""
+        if whisper:
+            return f"{Fore.CYAN}「 {whisper} 」{Fore.RESET}"
+        return ""
+
+class TimedInputManager:
+    """Handle timed input with threading"""
+    
+    def __init__(self):
+        self.input_received = None
+        self.time_limit = 8
+        self.input_thread = None
+        
+    def get_timed_input(self, prompt: str, choices: List[str], time_limit: int = 8) -> Optional[str]:
+        """Get user input within time limit"""
+        self.time_limit = time_limit
+        self.input_received = None
+        
+        print(f"{prompt}")
+        for i, choice in enumerate(choices):
+            print(f"  {choice}")
+        print(f"Time limit: {time_limit}s")
+        
+        # Start input thread
+        self.input_thread = threading.Thread(target=self._get_input)
+        self.input_thread.daemon = True
+        self.input_thread.start()
+        
+        # Wait for input or timeout
+        start_time = time.time()
+        while time.time() - start_time < time_limit:
+            if self.input_received is not None:
+                return self.input_received
+            time.sleep(0.1)
+            
+        print(f"\n{Fore.RED}⏰ Time's up! No action taken.{Fore.RESET}")
+        return None
+    
+    def _get_input(self):
+        """Thread function to get input"""
+        try:
+            if sys.platform == "win32":
+                # Windows implementation
+                import msvcrt
+                while self.input_received is None:
+                    if msvcrt.kbhit():
+                        key = msvcrt.getch().decode('utf-8').lower()
+                        self.input_received = key
+                        break
+                    time.sleep(0.01)
+            else:
+                # Unix-like systems
+                self.input_received = sys.stdin.readline().strip().lower()
+        except:
+            self.input_received = ""
+
+def colorize_text(text: str, color: str = "white", context: str = "general") -> str:
+    """Add color to text based on context"""
+    if not COLORS_AVAILABLE:
+        return text
+        
     color_map = {
-        "red": Colors.RED,
-        "green": Colors.GREEN,
-        "yellow": Colors.YELLOW,
-        "blue": Colors.BLUE,
-        "purple": Colors.PURPLE,
-        "cyan": Colors.CYAN,
-        "white": Colors.WHITE,
-        "gray": Colors.GRAY,
-        "grey": Colors.GRAY,
-        "bold": Colors.BOLD,
-        "underline": Colors.UNDERLINE,
-        "magenta": Colors.PURPLE,
-        "italic": Colors.GRAY,  # Use gray for italic since ANSI italic isn't widely supported
-        "gold": Colors.YELLOW   # Use yellow for gold
+        "lore": Fore.CYAN,
+        "boss": Fore.RED + Style.BRIGHT,
+        "npc": Fore.GREEN,
+        "item": Fore.YELLOW,
+        "warning": Fore.MAGENTA,
+        "whisper": Fore.CYAN + Style.DIM,
+        "death": Fore.RED + Back.BLACK,
+        "success": Fore.GREEN + Style.BRIGHT,
+        "white": Fore.WHITE,
+        "red": Fore.RED,
+        "cyan": Fore.CYAN
     }
     
-    color_code = color_map.get(color.lower(), Colors.WHITE)
-    return f"{color_code}{text}{Colors.END}"
+    chosen_color = color_map.get(context, color_map.get(color, Fore.WHITE))
+    return f"{chosen_color}{text}{Style.RESET_ALL}"
 
-def bold(text: str) -> str:
-    """Make text bold"""
-    return f"{Colors.BOLD}{text}{Colors.END}"
+def create_ascii_border(text: str, char: str = "═") -> str:
+    """Create ASCII border around text"""
+    lines = text.split('\n')
+    max_width = max(len(line) for line in lines) + 4
+    
+    border = char * max_width
+    result = [f"╔{border}╗"]
+    
+    for line in lines:
+        padded = line.center(max_width)
+        result.append(f"║{padded}║")
+    
+    result.append(f"╚{border}╝")
+    return '\n'.join(result)
 
-def underline(text: str) -> str:
-    """Underline text"""
-    return f"{Colors.UNDERLINE}{text}{Colors.END}"
+def wobble_text(text: str, intensity: float = 0.3) -> str:
+    """Create wobbling text effect for low sanity"""
+    if intensity <= 0:
+        return text
+        
+    wobbled = ""
+    for char in text:
+        if random.random() < intensity and char != ' ':
+            # Add space or duplicate character
+            if random.random() < 0.5:
+                wobbled += char + char  # Duplicate
+            else:
+                wobbled += char + " "   # Add space
+        else:
+            wobbled += char
+    
+    return wobbled
 
-def header(text: str, char: str = "=", width: int = 50) -> str:
-    """Create a header with separator lines"""
-    separator = char * width
-    return f"\n{separator}\n{text.center(width)}\n{separator}"
-
-def separator(char: str = "=", width: int = 50) -> str:
-    """Create a separator line"""
-    return char * width
-
-def format_stats(stats: Dict[str, int]) -> str:
+def format_stats_display(player) -> str:
     """Format player stats for display"""
-    formatted = []
-    for stat, value in stats.items():
-        formatted.append(f"{stat}: {value}")
-    return " | ".join(formatted)
+    stats_text = f"""
+{colorize_text('═══ CHARACTER STATUS ═══', context='success')}
+Name: {colorize_text(player.name, 'white')} | Class: {colorize_text(player.player_class, 'cyan')}
+Floor: {colorize_text(str(player.floor), 'red')} | Deaths: {colorize_text(str(player.deaths), 'red')}
 
-def format_hp_bar(current: int, maximum: int, width: int = 20) -> str:
-    """Create a visual HP bar"""
-    if maximum == 0:
-        percentage = 0
-    else:
-        percentage = current / maximum
+{colorize_text('╔═══ STATS ═══╗', 'cyan')}
+║ STR: {player.stats['str']:2d} ║ DEX: {player.stats['dex']:2d} ║
+║ INT: {player.stats['int']:2d} ║ FTH: {player.stats['fth']:2d} ║  
+║ END: {player.stats['end']:2d} ║ VIT: {player.stats['vit']:2d} ║
+{colorize_text('╚════════════╝', 'cyan')}
+
+Health: {colorize_text(f'{player.health}/{player.max_health}', 'red')}
+Stamina: {colorize_text(f'{player.stamina}/{player.max_stamina}', 'yellow')}
+Ashlight: {colorize_text(str(player.ashlight), 'yellow')}
+"""
     
-    filled = int(width * percentage)
-    empty = width - filled
+    if player.skills:
+        stats_text += f"\nSkills: {colorize_text(', '.join(player.skills), 'green')}"
     
-    bar = "█" * filled + "░" * empty
-    return f"[{bar}] {current}/{maximum}"
+    # Show sanity if low or if player has debug access
+    if player.sanity < 50:
+        sanity_color = 'red' if player.sanity < 30 else 'yellow'
+        stats_text += f"\nSanity: {colorize_text(f'{player.sanity:.1f}', sanity_color)}"
+    
+    return stats_text
 
-# ============================================================================
-# INPUT VALIDATION UTILITIES
-# ============================================================================
+def format_ending_screen(ending_type: str, profile: str, metrics: Dict[str, Any]) -> str:
+    """Format the ending screen"""
+    ending_titles = {
+        "True Flame": "🔥 THE TRUE FLAME ENDING 🔥",
+        "Compiled Husk": "💀 COMPILED HUSK ENDING 💀", 
+        "Ash Betrayal": "⚔️  ASH BETRAYAL ENDING ⚔️",
+        "False Salvation": "✨ FALSE SALVATION ENDING ✨",
+        "Eternal Loop": "🔄 ETERNAL LOOP ENDING 🔄",
+        "Broken Mind": "🧠 BROKEN MIND ENDING 🧠"
+    }
+    
+    title = ending_titles.get(ending_type, "UNKNOWN ENDING")
+    
+    ending_text = f"""
+{create_ascii_border(title)}
 
-def validate_choice(user_input: str, max_choice: int) -> Optional[int]:
-    """Validate user choice input"""
-    try:
-        choice = int(user_input.strip())
-        if 1 <= choice <= max_choice:
-            return choice
-        return None
-    except ValueError:
-        return None
+{colorize_text('ENTITY PSYCHOLOGICAL ASSESSMENT:', 'red')}
+{profile}
 
-def validate_number(user_input: str, min_val: int = None, max_val: int = None) -> Optional[int]:
-    """Validate numeric input with optional bounds"""
-    try:
-        number = int(user_input.strip())
-        if min_val is not None and number < min_val:
-            return None
-        if max_val is not None and number > max_val:
-            return None
-        return number
-    except ValueError:
-        return None
+{colorize_text('FINAL METRICS:', 'cyan')}
+Deaths: {metrics.get('deaths', 0)}
+Allies Trusted: {metrics.get('ally_count', 0)}
+Times Fled: {metrics.get('flee_count', 0)}
+Betrayals Committed: {metrics.get('betrayals', 0)}
+Floor Reached: {metrics.get('floor_reached', 1)}
 
-def safe_input(prompt: str, valid_options: List[str] = None) -> str:
-    """Get user input with validation"""
-    while True:
-        user_input = input(prompt).strip().lower()
-        if valid_options is None or user_input in valid_options:
-            return user_input
-        print(f"Invalid input. Valid options: {', '.join(valid_options)}")
+{colorize_text('The Entity has compiled your essence.', context='whisper')}
+{colorize_text('Thank you for playing Terminal Souls.', 'white')}
 
-def get_yes_no(prompt: str) -> bool:
-    """Get yes/no input from user"""
-    response = safe_input(f"{prompt} (y/n): ", ["y", "yes", "n", "no"])
-    return response in ["y", "yes"]
+{colorize_text('If this experience corrupted your mind in the best way:', 'cyan')}
+{colorize_text('Support the descent: https://buymeacoffee.com/amariahak', 'yellow')}
+"""
+    
+    return ending_text
 
-# ============================================================================
-# SCREEN AND DISPLAY UTILITIES
-# ============================================================================
+def save_whisper_archive(whispers: List[str]):
+    """Save top whispers to console log"""
+    if not whispers:
+        return
+        
+    print(f"\n{colorize_text('═══ ENTITY WHISPER ARCHIVE ═══', 'cyan')}")
+    
+    # Show top 3 whispers
+    for i, whisper in enumerate(whispers[-3:], 1):
+        print(f"{i}. {colorize_text(whisper, context='whisper')}")
+    
+    print(f"\n{colorize_text('These whispers are yours to keep.', 'white')}")
+
+def calculate_variance_score(actions: List[str]) -> float:
+    """Calculate variance score for predictability"""
+    if len(actions) < 3:
+        return 0.5
+        
+    # Simple entropy calculation
+    action_counts = {}
+    for action in actions:
+        action_counts[action] = action_counts.get(action, 0) + 1
+    
+    total = len(actions)
+    entropy = 0
+    for count in action_counts.values():
+        prob = count / total
+        entropy -= prob * np.log2(prob) if prob > 0 else 0
+    
+    max_entropy = np.log2(len(action_counts))
+    return entropy / max_entropy if max_entropy > 0 else 0
+
+def one_hot_encode_class(player_class: str) -> List[float]:
+    """One-hot encode player class"""
+    classes = ["Warrior", "Rogue", "Sorcerer", "Cleric", "Knight", "Hollow"]
+    encoding = [0.0] * len(classes)
+    
+    if player_class in classes:
+        encoding[classes.index(player_class)] = 1.0
+    
+    return encoding
 
 def clear_screen():
     """Clear the terminal screen"""
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def pause(message: str = "Press Enter to continue..."):
-    """Pause execution until user presses Enter"""
-    input(message)
+def press_enter_to_continue(message: str = "Press Enter to continue..."):
+    """Wait for user to press enter"""
+    input(f"\n{colorize_text(message, 'cyan')}")
 
-def wait_for_enter(message: str = "Press Enter to continue..."):
-    """Wait for user to press Enter"""
-    input(message)
-
-def wait(seconds: float):
-    """Wait for specified number of seconds"""
-    time.sleep(seconds)
-
-def slow_type(text: str, delay: float = 0.05):
-    """Type text slowly with delay between characters"""
-    for char in text:
-        print(char, end='', flush=True)
-        time.sleep(delay)
-    print()
-
-def print_slowly(text: str, delay: float = 0.03):
-    """Print text character by character with delay"""
-    for char in text:
-        print(char, end='', flush=True)
-        time.sleep(delay)
-    print()
-
-def display_menu(title: str, options: List[str], show_numbers: bool = True) -> None:
-    """Display a formatted menu"""
-    print(header(title))
-    for i, option in enumerate(options, 1):
-        if show_numbers:
-            print(f"[{i}] {option}")
-        else:
-            print(f"• {option}")
-    print()
-
-def display_two_column(left_data: List[str], right_data: List[str], 
-                      left_width: int = 25, separator: str = " | ") -> None:
-    """Display data in two columns"""
-    max_rows = max(len(left_data), len(right_data))
-    for i in range(max_rows):
-        left = left_data[i] if i < len(left_data) else ""
-        right = right_data[i] if i < len(right_data) else ""
-        print(f"{left:<{left_width}}{separator}{right}")
-
-# ============================================================================
-# RANDOM SELECTION UTILITIES
-# ============================================================================
-
-def weighted_choice(choices: Dict[Any, float]) -> Any:
-    """Select from weighted choices"""
-    total = sum(choices.values())
-    if total == 0:
-        return random.choice(list(choices.keys()))
-    
-    r = random.uniform(0, total)
-    current = 0
-    for choice, weight in choices.items():
-        current += weight
-        if r <= current:
-            return choice
-    return list(choices.keys())[-1]
-
-def probability_check(percentage: float) -> bool:
-    """Check if random event occurs based on percentage"""
-    return random.random() < (percentage / 100.0)
-
-def roll_dice(sides: int = 20, count: int = 1) -> Union[int, List[int]]:
-    """Roll dice and return result(s)"""
-    if count == 1:
-        return random.randint(1, sides)
-    return [random.randint(1, sides) for _ in range(count)]
-
-def shuffle_list(items: List[Any]) -> List[Any]:
-    """Return shuffled copy of list"""
-    shuffled = items.copy()
-    random.shuffle(shuffled)
-    return shuffled
-
-# ============================================================================
-# FILE I/O UTILITIES
-# ============================================================================
-
-def load_json(filepath: str, default: Any = None) -> Any:
-    """Load JSON data from file with error handling"""
-    try:
-        if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
-                return json.load(f)
-        return default
-    except (json.JSONDecodeError, IOError):
-        return default
-
-def save_json(data: Any, filepath: str, create_dirs: bool = True) -> bool:
-    """Save data to JSON file with error handling"""
-    try:
-        if create_dirs:
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w') as f:
-            json.dump(data, f, indent=2)
-        return True
-    except (IOError, TypeError):
-        return False
-
-def ensure_directory(path: str) -> bool:
-    """Ensure directory exists, create if necessary"""
-    try:
-        os.makedirs(path, exist_ok=True)
-        return True
-    except OSError:
-        return False
-
-def file_exists(filepath: str) -> bool:
-    """Check if file exists"""
-    return os.path.exists(filepath)
-
-def read_text_file(filepath: str, default: str = "") -> str:
-    """Read text file content with error handling"""
-    try:
-        with open(filepath, 'r') as f:
-            return f.read()
-    except IOError:
-        return default
-
-def write_text_file(content: str, filepath: str, create_dirs: bool = True) -> bool:
-    """Write text content to file"""
-    try:
-        if create_dirs:
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w') as f:
-            f.write(content)
-        return True
-    except IOError:
-        return False
-
-# ============================================================================
-# TIMER AND DELAY UTILITIES
-# ============================================================================
-
-def countdown_timer(seconds: int, message: str = "Time remaining") -> None:
-    """Display countdown timer"""
-    for i in range(seconds, 0, -1):
-        print(f"\r{message}: {i}s", end="", flush=True)
-        time.sleep(1)
-    print(f"\r{message}: 0s - Time's up!")
-
-def delayed_execution(func, delay: float, *args, **kwargs) -> threading.Thread:
-    """Execute function after delay in separate thread"""
-    def delayed_func():
-        time.sleep(delay)
-        func(*args, **kwargs)
-    
-    thread = threading.Thread(target=delayed_func)
-    thread.daemon = True
-    thread.start()
-    return thread
-
-def measure_time(func, *args, **kwargs) -> Tuple[Any, float]:
-    """Measure execution time of function"""
-    start_time = time.time()
-    result = func(*args, **kwargs)
-    execution_time = time.time() - start_time
-    return result, execution_time
-
-class Timer:
-    """Simple timer utility"""
-    
-    def __init__(self):
-        self.start_time = None
-        self.end_time = None
-    
-    def start(self):
-        """Start the timer"""
-        self.start_time = time.time()
-        self.end_time = None
-    
-    def stop(self) -> float:
-        """Stop the timer and return elapsed time"""
-        if self.start_time is None:
-            return 0.0
-        self.end_time = time.time()
-        return self.elapsed()
-    
-    def elapsed(self) -> float:
-        """Get elapsed time"""
-        if self.start_time is None:
-            return 0.0
-        end = self.end_time if self.end_time else time.time()
-        return end - self.start_time
-
-# ============================================================================
-# GAME-SPECIFIC UTILITIES
-# ============================================================================
-
-def format_weapon_stats(weapon: Dict[str, Any]) -> str:
-    """Format weapon stats for display"""
-    name = weapon.get("name", "Unknown")
-    damage = weapon.get("damage", 0)
-    speed = weapon.get("speed", "Unknown")
-    weapon_type = weapon.get("type", "Unknown")
-    
-    return f"{name} ({weapon_type}) - {damage} DMG - {speed}"
-
-def calculate_stat_modifier(stat_value: int) -> int:
-    """Calculate stat modifier from base value"""
-    return stat_value // 2
-
-def clamp(value: int, min_val: int, max_val: int) -> int:
-    """Clamp value between min and max"""
-    return max(min_val, min(value, max_val))
-
-def percentage_of(current: int, maximum: int) -> float:
-    """Calculate percentage"""
-    if maximum == 0:
-        return 0.0
-    return (current / maximum) * 100
-
-def distance_between_choices(choice1: int, choice2: int, max_choices: int) -> int:
-    """Calculate distance between menu choices (for pattern analysis)"""
-    return min(abs(choice1 - choice2), max_choices - abs(choice1 - choice2))
-
-def track_sequence_pattern(sequence: List[Any], max_length: int = 10) -> List[Any]:
-    """Maintain a sequence of recent actions for pattern analysis"""
-    if len(sequence) >= max_length:
-        sequence.pop(0)
-    return sequence
-
-def emoji_indicator(condition: bool, true_emoji: str = "✅", false_emoji: str = "❌") -> str:
-    """Return emoji based on condition"""
-    return true_emoji if condition else false_emoji
-
-# ============================================================================
-# ERROR HANDLING UTILITIES
-# ============================================================================
-
-def safe_divide(a: float, b: float, default: float = 0.0) -> float:
-    """Safe division with default for zero division"""
-    try:
-        return a / b if b != 0 else default
-    except (TypeError, ZeroDivisionError):
-        return default
-
-def safe_get(dictionary: Dict, key: Any, default: Any = None) -> Any:
-    """Safe dictionary get with default"""
-    try:
-        return dictionary.get(key, default)
-    except (AttributeError, TypeError):
-        return default
-
-def safe_int(value: Any, default: int = 0) -> int:
-    """Safe integer conversion"""
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
-
-def safe_float(value: Any, default: float = 0.0) -> float:
-    """Safe float conversion"""
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        return default
+# Global instances
+music_manager = MusicManager()
+ui_distorter = UIDistorter()
+narrator_filter = NarratorFilter()
+input_manager = TimedInputManager()

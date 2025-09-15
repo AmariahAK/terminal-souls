@@ -1,532 +1,515 @@
-import json
-import os
 import random
-from typing import Dict, List, Any, Optional, Tuple
-from entity import memory_engine
+import json
+from typing import Dict, List, Any, Optional
 
-class NPCSystem:
-    """
-    Memory-bound NPC system that reacts to player behavior and evolves with memory.
-    NPCs are mirrors - they reflect who the player is or who they pretend not to be.
-    """
+from utils import colorize_text, narrator_filter, press_enter_to_continue
+
+class NPC:
+    """Individual NPC with AI-driven dialogue and relationship dynamics"""
     
-    def __init__(self):
-        self.memory = memory_engine
-        self.npc_state = self._load_npc_state()
-        self.dialogue = self._load_dialogue()
-        self.available_npcs = self._get_available_npcs()
+    def __init__(self, name: str, npc_type: str, entity_ai):
+        self.name = name
+        self.npc_type = npc_type
+        self.entity_ai = entity_ai
+        self.base_trust = 0
+        self.interaction_count = 0
+        self.last_interaction_type = None
+        self.dialogue_context = {}
+        
+    def generate_dialogue(self, player, interaction_type: str = "greeting") -> str:
+        """Generate AI-driven dialogue based on player state and relationships"""
+        player_vector = player.state_vector()
+        
+        # Get base dialogue template
+        base_dialogue = self.get_base_dialogue(interaction_type)
+        
+        # Apply relationship modifiers
+        trust = player.npc_relationships[self.name]["trust"]
+        
+        # Generate contextual lore for dialogue
+        dialogue_lore = self.entity_ai.generate_lore(
+            player_vector,
+            player.floor,
+            f"npc_{self.name}_{interaction_type}"
+        )
+        
+        # Combine base dialogue with AI-generated content
+        final_dialogue = self.customize_dialogue(base_dialogue, dialogue_lore, trust, player)
+        
+        return narrator_filter.filter_text(final_dialogue, "npc")
     
-    def _load_npc_state(self) -> Dict[str, Any]:
-        """Load NPC state from JSON file"""
-        if os.path.exists("memory/npc_state.json"):
-            with open("memory/npc_state.json", 'r') as f:
-                return json.load(f)
-        else:
-            # Create default NPC state
-            default_state = {
-                "The Lorekeeper": {
-                    "mood": "Neutral",
-                    "available": True,
-                    "visits": 0,
-                    "lore_unlocked": 0,
-                    "ignored_count": 0
-                },
-                "Blacktongue": {
-                    "mood": "Neutral", 
-                    "available": True,
-                    "visits": 0,
-                    "upgrades_done": 0,
-                    "ashlight_hoarded": False
-                },
-                "Ash Sister": {
-                    "mood": "Neutral",
-                    "available": True,
-                    "visits": 0,
-                    "riddles_answered": 0,
-                    "riddles_failed": 0,
-                    "insulted": False,
-                    "betrayed": False
-                },
-                "Faceless Merchant": {
-                    "mood": "Neutral",
-                    "available": True,
-                    "visits": 0,
-                    "underpaid_count": 0,
-                    "ignored_count": 0,
-                    "may_leave": False
-                },
-                "Still Flame Warden": {
-                    "mood": "Neutral",
-                    "available": True,
-                    "visits": 0
-                },
-                "The Hollowed": {
-                    "mood": "Neutral",
-                    "available": True,
-                    "visits": 0,
-                    "reflected_build": False,
-                    "past_run_referenced": False
-                }
-            }
-            self._save_npc_state(default_state)
-            return default_state
-    
-    def _load_dialogue(self) -> Dict[str, Any]:
-        """Load dialogue from JSON file"""
-        if os.path.exists("memory/npc_dialogue.json"):
-            with open("memory/npc_dialogue.json", 'r') as f:
-                return json.load(f)
-        else:
-            # Create dialogue file if it doesn't exist
-            self._create_dialogue_file()
-            with open("memory/npc_dialogue.json", 'r') as f:
-                return json.load(f)
-    
-    def _save_npc_state(self, state: Dict[str, Any]) -> None:
-        """Save NPC state to file"""
-        os.makedirs("memory", exist_ok=True)
-        with open("memory/npc_state.json", 'w') as f:
-            json.dump(state, f, indent=2)
-    
-    def _get_available_npcs(self) -> List[str]:
-        """Get list of NPCs that haven't been betrayed or left"""
-        available = []
-        for npc_name, state in self.npc_state.items():
-            if state["available"] and not self.memory.is_betrayed(npc_name):
-                available.append(npc_name)
-        return available
-    
-    def _update_mood(self, npc_name: str) -> str:
-        """Update NPC mood based on memory and interactions"""
-        npc_memory = self.memory.get("npc_interaction_log", {}).get(npc_name, {})
-        npc_state = self.npc_state[npc_name]
-        
-        # Base mood calculations
-        visits = npc_memory.get("visits", 0)
-        
-        if npc_name == "The Lorekeeper":
-            ignored = npc_state.get("ignored_count", 0)
-            lore_unlocked = npc_state.get("lore_unlocked", 0)
-            if ignored > 3:
-                return "Mocking"
-            elif lore_unlocked > 2:
-                return "Respectful"
-            elif visits > 5:
-                return "Respectful"
-            
-        elif npc_name == "Blacktongue":
-            upgrades = npc_state.get("upgrades_done", 0)
-            ashlight_hoarded = npc_state.get("ashlight_hoarded", False)
-            if ashlight_hoarded or upgrades > 10:
-                return "Mocking"
-            elif upgrades > 3:
-                return "Respectful"
-            elif visits == 0:
-                return "Hostile"
-                
-        elif npc_name == "Ash Sister":
-            if npc_state.get("insulted", False):
-                return "Hostile"
-            riddles_answered = npc_state.get("riddles_answered", 0)
-            riddles_failed = npc_state.get("riddles_failed", 0)
-            if riddles_failed > riddles_answered:
-                return "Mocking"
-            elif riddles_answered > 2:
-                return "Respectful"
-                
-        elif npc_name == "Faceless Merchant":
-            underpaid = npc_state.get("underpaid_count", 0)
-            ignored = npc_state.get("ignored_count", 0)
-            if underpaid > 2 or ignored > 4:
-                return "Hostile"
-            elif visits > 3:
-                return "Respectful"
-                
-        elif npc_name == "The Hollowed":
-            deaths = self.memory.get("times_restarted", 0)
-            if deaths > 5:
-                return "Mocking" 
-            elif deaths > 2:
-                return "Respectful"
-        
-        # Still Flame Warden always neutral
-        return "Neutral"
-    
-    def interact_with_npc(self, npc_name: str) -> Dict[str, Any]:
-        """Main interaction method - returns dialogue and choices"""
-        if npc_name not in self.available_npcs:
-            return {"error": f"{npc_name} is not available"}
-        
-        # Update mood before interaction
-        mood = self._update_mood(npc_name)
-        self.npc_state[npc_name]["mood"] = mood
-        self.npc_state[npc_name]["visits"] += 1
-        
-        # Update memory tracking
-        self.memory.update_npc_interaction(npc_name, "visit")
-        
-        # Get dialogue based on mood and memory
-        dialogue_entry = self._get_dialogue(npc_name, mood)
-        choices = self._get_choices(npc_name, mood)
-        
-        self._save_npc_state(self.npc_state)
-        
-        return {
-            "npc": npc_name,
-            "mood": mood,
-            "dialogue": dialogue_entry,
-            "choices": choices,
-            "can_betray": npc_name in ["Ash Sister", "Faceless Merchant"]
-        }
-    
-    def _get_dialogue(self, npc_name: str, mood: str) -> str:
-        """Get appropriate dialogue based on NPC, mood, and memory"""
-        npc_dialogue = self.dialogue[npc_name][mood]
-        
-        # Add memory-specific dialogue modifications
-        memory_data = self.memory.get_adaptation_data()
-        player_class = self.memory.get("class_selected", "")
-        deaths = self.memory.get("times_restarted", 0)
-        
-        # Select dialogue based on context
-        dialogue_options = npc_dialogue.copy()
-        
-        # Add memory-influenced variations from the full NPC dialogue pool
-        full_npc_dialogue = self.dialogue[npc_name]
-        
-        if deaths > 3 and npc_name == "The Hollowed":
-            high_death_dialogue = full_npc_dialogue.get("high_death_count", [])
-            if high_death_dialogue:
-                dialogue_options.extend(high_death_dialogue)
-        
-        if player_class and npc_name != "Still Flame Warden":
-            class_specific = full_npc_dialogue.get(f"class_{player_class.lower()}", [])
-            if class_specific:
-                dialogue_options.extend(class_specific)
-        
-        return random.choice(dialogue_options)
-    
-    def _get_choices(self, npc_name: str, mood: str) -> List[Dict[str, str]]:
-        """Get interaction choices for the NPC"""
-        base_choices = [
-            {"text": "Ask about their role", "action": "ask_role"},
-            {"text": "Leave", "action": "leave"}
-        ]
-        
-        # NPC-specific choices
-        if npc_name == "The Lorekeeper":
-            base_choices.insert(0, {"text": "Request lore knowledge", "action": "request_lore"})
-            if mood == "Mocking":
-                base_choices.append({"text": "Apologize for neglect", "action": "apologize"})
-                
-        elif npc_name == "Blacktongue":
-            base_choices.insert(0, {"text": "Request weapon upgrade", "action": "upgrade_weapon"})
-            base_choices.insert(1, {"text": "Ask about materials", "action": "ask_materials"})
-            
-        elif npc_name == "Ash Sister":
-            base_choices.insert(0, {"text": "Ask for a riddle", "action": "request_riddle"})
-            if mood != "Hostile":
-                base_choices.append({"text": "Compliment her wisdom", "action": "compliment"})
-            if mood == "Hostile":
-                base_choices.append({"text": "Challenge her", "action": "betray"})
-                
-        elif npc_name == "Faceless Merchant":
-            base_choices.insert(0, {"text": "Browse wares", "action": "browse"})
-            base_choices.insert(1, {"text": "Ask about rare items", "action": "ask_rare"})
-            
-        elif npc_name == "Still Flame Warden":
-            base_choices.insert(0, {"text": "Level up stats", "action": "level_stats"})
-            base_choices.insert(1, {"text": "Learn skills", "action": "learn_skills"})
-            
-        elif npc_name == "The Hollowed":
-            base_choices.insert(0, {"text": "Ask about past runs", "action": "ask_past"})
-            base_choices.insert(1, {"text": "Reflect on deaths", "action": "reflect"})
-        
-        return base_choices
-    
-    def handle_choice(self, npc_name: str, choice_action: str) -> Dict[str, Any]:
-        """Handle player's choice and return consequences"""
-        if npc_name not in self.available_npcs:
-            return {"error": f"{npc_name} is not available"}
-        
-        npc_state = self.npc_state[npc_name]
-        result = {"action": choice_action, "consequence": "", "mood_changed": False}
-        
-        # Track choice in memory
-        self.memory.update_npc_interaction(npc_name, "choice", choice_action)
-        
-        # Handle specific actions
-        if choice_action == "leave":
-            result["consequence"] = f"You leave {npc_name}"
-            if npc_name == "Faceless Merchant":
-                npc_state["ignored_count"] += 1
-            elif npc_name == "The Lorekeeper":
-                npc_state["ignored_count"] += 1
-                
-        elif choice_action == "betray" and npc_name == "Ash Sister":
-            return self._handle_betrayal(npc_name)
-            
-        elif choice_action == "request_lore" and npc_name == "The Lorekeeper":
-            npc_state["lore_unlocked"] += 1
-            result["consequence"] = "The Lorekeeper shares ancient knowledge with you"
-            result["lore_gained"] = True
-            
-        elif choice_action == "upgrade_weapon" and npc_name == "Blacktongue":
-            npc_state["upgrades_done"] += 1
-            result["consequence"] = "Blacktongue improves your weapon"
-            result["weapon_upgraded"] = True
-            
-        elif choice_action == "request_riddle" and npc_name == "Ash Sister":
-            return self._handle_riddle()
-            
-        elif choice_action == "apologize":
-            old_mood = npc_state["mood"] 
-            npc_state["mood"] = "Neutral"
-            npc_state["ignored_count"] = 0
-            result["mood_changed"] = old_mood != "Neutral"
-            result["consequence"] = f"{npc_name} accepts your apology"
-        
-        # Check for mood changes and consequences
-        new_mood = self._update_mood(npc_name)
-        if new_mood != npc_state["mood"]:
-            npc_state["mood"] = new_mood
-            result["mood_changed"] = True
-            result["new_mood"] = new_mood
-        
-        # Check if Faceless Merchant should leave
-        if npc_name == "Faceless Merchant" and npc_state["ignored_count"] > 5:
-            result["npc_left"] = True
-            npc_state["available"] = False
-            self.available_npcs.remove(npc_name)
-        
-        self._save_npc_state(self.npc_state)
-        return result
-    
-    def _handle_betrayal(self, npc_name: str) -> Dict[str, Any]:
-        """Handle NPC betrayal with permanent consequences"""
-        self.memory.add_betrayal(npc_name, "direct_challenge")
-        self.npc_state[npc_name]["available"] = False
-        self.npc_state[npc_name]["betrayed"] = True
-        
-        if npc_name in self.available_npcs:
-            self.available_npcs.remove(npc_name)
-        
-        self._save_npc_state(self.npc_state)
-        
-        return {
-            "action": "betray",
-            "consequence": f"{npc_name} disappears in fury. They will remember this betrayal.",
-            "betrayal": True,
-            "boss_spawned": npc_name == "Ash Sister",  # Becomes boss
-            "permanent": True
-        }
-    
-    def _handle_riddle(self) -> Dict[str, Any]:
-        """Handle Ash Sister's riddle system"""
-        riddles = [
-            {
-                "question": "I am the memory of flame, yet cold as forgotten ash. What am I?",
-                "answers": ["A dead ember", "Ember", "Memory", "The past"],
-                "correct": "A dead ember"
-            },
-            {
-                "question": "What grows stronger the more it is broken?",
-                "answers": ["Resolve", "Will", "Determination", "The soul"],
-                "correct": "Resolve"
-            },
-            {
-                "question": "I am present in death, absent in life, yet both need me to have meaning. What am I?",
-                "answers": ["An ending", "Ending", "Finality", "Purpose"],
-                "correct": "An ending"
-            }
-        ]
-        
-        riddle = random.choice(riddles)
-        
-        return {
-            "action": "riddle",
-            "riddle_question": riddle["question"],
-            "riddle_choices": [{"text": answer, "action": f"answer_{i}"} for i, answer in enumerate(riddle["answers"])],
-            "correct_answer": riddle["correct"],
-            "consequence": "Ash Sister poses a riddle"
-        }
-    
-    def answer_riddle(self, answer_index: int) -> Dict[str, Any]:
-        """Handle riddle answer"""
-        # This would need the current riddle context - simplified for now
-        correct = random.choice([True, False])  # In full implementation, check against correct answer
-        
-        npc_state = self.npc_state["Ash Sister"]
-        
-        if correct:
-            npc_state["riddles_answered"] += 1
-            return {
-                "correct": True,
-                "consequence": "Ash Sister nods approvingly. 'Wisdom flows through you.'",
-                "mood_change": "Respectful" if npc_state["riddles_answered"] > 2 else None
-            }
-        else:
-            npc_state["riddles_failed"] += 1
-            return {
-                "correct": False,
-                "consequence": "Ash Sister shakes her head. 'The answer was within you, yet you could not see.'",
-                "mood_change": "Mocking" if npc_state["riddles_failed"] > 2 else None
-            }
-    
-    def force_dialogue_check(self) -> Optional[Dict[str, Any]]:
-        """Check if any NPC should force dialogue based on run conditions"""
-        memory_data = self.memory.get_adaptation_data()
-        
-        # The Hollowed appears after multiple deaths
-        if (memory_data["deaths_count"] > 3 and 
-            self.npc_state["The Hollowed"]["visits"] == 0 and
-            "The Hollowed" in self.available_npcs):
-            return {
-                "forced_npc": "The Hollowed",
-                "reason": "appears_after_deaths",
-                "dialogue": "A familiar shadow stirs... 'I remember when you fought differently.'"
-            }
-        
-        # Lorekeeper gets impatient if never visited
-        if (self.memory.get("floors_cleared", 0) > 2 and 
-            self.npc_state["The Lorekeeper"]["visits"] == 0):
-            return {
-                "forced_npc": "The Lorekeeper", 
-                "reason": "neglected_too_long",
-                "dialogue": "The Lorekeeper's voice echoes: 'You pass by knowledge as if it were poison.'"
-            }
-        
-        return None
-    
-    def get_npc_status(self) -> Dict[str, Any]:
-        """Get current status of all NPCs"""
-        status = {}
-        for npc_name in ["The Lorekeeper", "Blacktongue", "Ash Sister", "Faceless Merchant", "Still Flame Warden", "The Hollowed"]:
-            npc_state = self.npc_state.get(npc_name, {})
-            status[npc_name] = {
-                "available": npc_state.get("available", True) and not self.memory.is_betrayed(npc_name),
-                "mood": npc_state.get("mood", "Neutral"),
-                "visits": npc_state.get("visits", 0),
-                "betrayed": self.memory.is_betrayed(npc_name)
-            }
-        return status
-    
-    def _create_dialogue_file(self):
-        """Create the dialogue JSON file"""
-        dialogue_data = {
-            "The Lorekeeper": {
-                "Neutral": [
-                    "Knowledge is earned, not given. What would you learn?",
-                    "The archives remember what flesh forgets. Seek wisdom?",
-                    "Every death teaches. Do you wish to understand the lesson?"
-                ],
-                "Mocking": [
-                    "You walk past wisdom like a blind man past art.",
-                    "Ignorance is chosen, not born. You prove this daily.",
-                    "The lore gathers dust while you stumble in darkness."
-                ],
-                "Respectful": [
-                    "You seek knowledge with true hunger. This pleases the archives.",
-                    "A student who listens learns twice what one who merely hears.",
-                    "Your curiosity honors those who came before."
-                ],
-                "Hostile": [
-                    "You have shown your true nature. Begone.",
-                    "Knowledge is wasted on the willfully ignorant."
-                ]
+    def get_base_dialogue(self, interaction_type: str) -> str:
+        """Get base dialogue templates by NPC type"""
+        dialogues = {
+            "Lorekeeper": {
+                "greeting": "Seeker of truths, I archive the fragments that bleed through...",
+                "trade": "Knowledge has its price. What do you offer for forbidden understanding?",
+                "help": "The codes whisper of your path. I shall illuminate the shadows.",
+                "betray": "So... even truth-seekers can fall to corruption. I expected better.",
+                "farewell": "May the fragments guide your descent, wanderer."
             },
             "Blacktongue": {
-                "Neutral": [
-                    "You got coin or are we just chatting again?",
-                    "My anvil's hot, your blade's dull. Let's fix one of those.",
-                    "Steel knows no lies. Unlike its wielder."
-                ],
-                "Mocking": [
-                    "You upgrade like a child guessing which end is sharp.",
-                    "Throwing good coin after bad steel. That's your way.",
-                    "I've seen miners with better weapon sense than you."
-                ],
-                "Respectful": [
-                    "Your blade remembers every blow. I only sharpen memory.",
-                    "A warrior who maintains their tools deserves quality work.",
-                    "You understand steel. That makes you rarer than you know."
-                ],
-                "Hostile": [
-                    "Get out. Next time, I temper *you*.",
-                    "My forge is closed to those who waste my time."
-                ]
+                "greeting": "Forge-fire burns bright. Your gear reeks of weakness.",
+                "trade": "Ashlight buys improvement. No payment, no progress.",
+                "help": "Your blade thirsts for enhancement. Let me feed it.",
+                "betray": "You dare strike the one who would make you whole? Fool.",
+                "farewell": "The forge remembers every spark. Return when you're worthy."
             },
             "Ash Sister": {
-                "Neutral": [
-                    "Riddles are keys. Do you wish to unlock understanding?",
-                    "The wise speak in questions, the foolish in certainties.",
-                    "What you seek is hidden in what you already know."
-                ],
-                "Mocking": [
-                    "Even children solve what puzzles you.",
-                    "Your mind is rust where wisdom should gleam.",
-                    "I speak in riddles because straight truth would break you."
-                ],
-                "Respectful": [
-                    "You think before answering. Rare wisdom in these halls.",
-                    "Each riddle you solve proves you understand mystery.",
-                    "The clever see puzzles. The wise see truth."
-                ],
-                "Hostile": [
-                    "You dare challenge what you cannot comprehend?",
-                    "Disrespect will be met with consequences beyond death."
-                ]
+                "greeting": "Riddles dance in the digital wind. Do you hear their song?",
+                "trade": "Wisdom traded for wisdom. A fair exchange, yes?",
+                "help": "The patterns in your soul... let me weave them into clarity.",
+                "betray": "Betrayal cuts deeper than any blade. The riddles grow silent.",
+                "farewell": "May paradox guide you to truth, or truth to paradox."
             },
             "Faceless Merchant": {
-                "Neutral": [
-                    "Rare goods for those who appreciate rarity.",
-                    "My wares choose their owners. Let us see if they choose you.",
-                    "Value is subjective. Price is not."
-                ],
-                "Mocking": [
-                    "You haggle like a peasant at market day.",
-                    "Perhaps my goods are too refined for your... tastes.",
-                    "I've seen beggars with more coin sense."
-                ],
-                "Respectful": [
-                    "A customer who pays fairly earns the finest selection.",
-                    "You understand the true worth of exceptional items.",
-                    "Quality recognizes quality. You may browse my private stock."
-                ],
-                "Hostile": [
-                    "You have proven unworthy of my attention.",
-                    "Find another to suffer your insulting offers."
-                ]
+                "greeting": "Coin and code exchange freely here. What do you require?",
+                "trade": "Quality items for quality payment. Simple commerce.",
+                "help": "A discount for a friend? The market allows such... generosity.",
+                "betray": "Theft from a merchant? The market will remember this transgression.",
+                "farewell": "Until supply meets demand again, customer."
             },
             "Still Flame Warden": {
-                "Neutral": [
-                    "Strength, dexterity, intelligence, faith, endurance, vitality. Choose.",
-                    "Power flows to those who shape themselves. What will you become?",
-                    "I offer improvement. You provide the will to change."
-                ]
+                "greeting": "The flame guides growth. Show me your readiness to ascend.",
+                "trade": "Advancement requires dedication. Skill points for new paths.",
+                "help": "Your potential burns brighter. Let the flame shape you.",
+                "betray": "The flame burns betrayers hottest. You have chosen poorly.",
+                "farewell": "The flame eternal burns within. Carry it well."
             },
             "The Hollowed": {
-                "Neutral": [
-                    "I remember your other selves. Do you?",
-                    "Death is not failure. Forgetting is.",
-                    "You were different before. All souls are."
-                ],
-                "Mocking": [
-                    "You repeat the same mistakes with religious devotion.",
-                    "Even ghosts learn from death. You prove this wrong.",
-                    "I am your echo. Listen to how hollow you sound."
-                ],
-                "Respectful": [
-                    "Each death taught you something. I see the lessons in your eyes.",
-                    "You carry your failures like wisdom now. This is growth.",
-                    "The past informs the present. You understand this."
-                ]
+                "greeting": "I remember... faces like yours. Before the compilation.",
+                "trade": "Echoes of past runs linger. Perhaps they can aid you.",
+                "help": "Your failures mirror mine. Learn from the patterns.",
+                "betray": "Even the hollowed can feel pain. Why add to it?",
+                "farewell": "We are all echoes here. Some just forgot to fade."
             }
         }
         
-        os.makedirs("memory", exist_ok=True)
-        with open("memory/npc_dialogue.json", 'w') as f:
-            json.dump(dialogue_data, f, indent=2)
+        npc_dialogues = dialogues.get(self.name, {})
+        return npc_dialogues.get(interaction_type, "...")
+    
+    def customize_dialogue(self, base_dialogue: str, ai_lore: str, trust: int, player) -> str:
+        """Customize dialogue based on AI generation and relationship state"""
+        # Trust level modifications
+        if trust > 30:
+            # High trust - friendly, helpful
+            base_dialogue = base_dialogue.replace("your", "dear friend")
+            if random.random() < 0.3:
+                base_dialogue += f" {ai_lore}"
+                
+        elif trust < -20:
+            # Low trust - hostile, dismissive
+            base_dialogue = base_dialogue.replace("wanderer", "betrayer")
+            base_dialogue = base_dialogue.replace("friend", "enemy")
+            if "betray" not in base_dialogue.lower():
+                base_dialogue += " Trust, once broken, does not mend."
+                
+        # Reference other NPCs in relationship web
+        if random.random() < 0.4:
+            relationship_refs = self.generate_relationship_references(player)
+            if relationship_refs:
+                base_dialogue += f" {relationship_refs}"
+        
+        # Entity influence on high predictability
+        if player.predictability > 0.7:
+            entity_whisper = f" The Entity notes your... consistency."
+            if random.random() < 0.3:
+                base_dialogue += entity_whisper
+        
+        return base_dialogue
+    
+    def generate_relationship_references(self, player) -> str:
+        """Generate references to other NPCs based on relationship web"""
+        refs = []
+        my_relationship = player.npc_relationships[self.name]
+        
+        # Reference allies
+        for ally in my_relationship.get("allies", []):
+            if ally in player.npc_relationships:
+                ally_trust = player.npc_relationships[ally]["trust"]
+                if ally_trust > 20:
+                    refs.append(f"{ally} speaks well of you.")
+                elif ally_trust < -10:
+                    refs.append(f"{ally} warns others about your betrayals.")
+        
+        # Reference enemies
+        for enemy in my_relationship.get("enemies", []):
+            if enemy in player.npc_relationships:
+                enemy_trust = player.npc_relationships[enemy]["trust"]
+                if enemy_trust > 20:
+                    refs.append(f"I hear you favor {enemy}. Curious choice.")
+                    
+        return random.choice(refs) if refs else ""
 
-# Global NPC system instance
-npc_system = NPCSystem()
+class NPCManager:
+    """Manages all NPC interactions and relationship webs"""
+    
+    def __init__(self, entity_ai):
+        self.entity_ai = entity_ai
+        self.npcs = {}
+        self.initialize_npcs()
+        self.establish_base_relationships()
+        
+    def initialize_npcs(self):
+        """Initialize all NPCs"""
+        npc_names = [
+            "Lorekeeper", "Blacktongue", "Ash Sister", 
+            "Faceless Merchant", "Still Flame Warden", "The Hollowed"
+        ]
+        
+        for name in npc_names:
+            self.npcs[name] = NPC(name, name.lower().replace(" ", "_"), self.entity_ai)
+    
+    def establish_base_relationships(self):
+        """Establish base NPC-to-NPC relationships"""
+        # These relationships affect how NPCs reference each other
+        relationships = {
+            ("Lorekeeper", "Ash Sister"): "ally",     # Both deal with knowledge
+            ("Blacktongue", "Faceless Merchant"): "ally",  # Both deal with items
+            ("Lorekeeper", "The Hollowed"): "enemy",  # Knowledge vs Forgetting
+            ("Still Flame Warden", "The Hollowed"): "enemy",  # Growth vs Decay
+            ("Ash Sister", "Blacktongue"): "enemy",   # Wisdom vs Materialism
+        }
+        
+        self.base_relationships = relationships
+    
+    def interact(self, player, npc_name: str, interaction_type: str = "greeting"):
+        """Handle player interaction with NPC"""
+        if npc_name not in self.npcs:
+            print(f"{colorize_text(f'{npc_name} is not here.', 'red')}")
+            return
+            
+        npc = self.npcs[npc_name]
+        npc.interaction_count += 1
+        
+        # Generate and display dialogue
+        dialogue = npc.generate_dialogue(player, interaction_type)
+        print(f"\n{colorize_text(npc_name, context='npc')}: {dialogue}")
+        
+        # Handle specific interaction types
+        if interaction_type == "trade":
+            self.handle_trade(player, npc)
+        elif interaction_type == "help":
+            self.handle_help(player, npc)
+        elif interaction_type == "betray":
+            self.handle_betrayal(player, npc)
+        
+        # Update relationship web
+        self.update_relationship_web(player, npc_name, interaction_type)
+        
+    def handle_trade(self, player, npc: NPC):
+        """Handle trading with NPC"""
+        if npc.name == "Faceless Merchant":
+            self.merchant_trade(player, npc)
+        elif npc.name == "Blacktongue":
+            self.blacksmith_trade(player, npc)
+        elif npc.name == "Still Flame Warden":
+            self.skill_trade(player, npc)
+        else:
+            print(f"{colorize_text(f'{npc.name} does not trade.', 'yellow')}")
+    
+    def merchant_trade(self, player, npc: NPC):
+        """Handle Faceless Merchant trade"""
+        # Generate shop using EntityAI
+        shop_data = self.entity_ai.generate_shop(
+            player.state_vector(),
+            player.floor,
+            player.ashlight
+        )
+        
+        print(f"\n{colorize_text('═══ MERCHANT SHOP ═══', 'yellow')}")
+        print(f"{shop_data['flavor']}")
+        print(f"Your {shop_data['currency']}: {colorize_text(str(player.ashlight), 'yellow')}\n")
+        
+        # Display items
+        for i, item_data in enumerate(shop_data["items"]):
+            item = item_data["item"]
+            price = item_data["price"]
+            print(f"{i+1}. {colorize_text(item['name'], 'yellow')} - {price} {shop_data['currency']}")
+            
+        print(f"4. {colorize_text('Leave', 'white')}")
+        
+        # Get player choice
+        try:
+            choice = int(input(f"\n{colorize_text('Buy item (1-4):', 'white')} ")) - 1
+            
+            if 0 <= choice < 3:
+                item_data = shop_data["items"][choice]
+                if player.ashlight >= item_data["price"]:
+                    player.ashlight -= item_data["price"]
+                    player.inventory.append(item_data["item"])
+                    print(f"{colorize_text('Purchased ' + item_data['item']['name'] + '!', 'green')}")
+                    player.interact_with_npc(npc.name, "trade")
+                else:
+                    print(f"{colorize_text('Not enough Ashlight.', 'red')}")
+            elif choice == 3:
+                print(f"{colorize_text('You leave the shop.', 'white')}")
+            else:
+                print(f"{colorize_text('Invalid choice.', 'red')}")
+                
+        except ValueError:
+            print(f"{colorize_text('Invalid input.', 'red')}")
+    
+    def blacksmith_trade(self, player, npc: NPC):
+        """Handle Blacktongue enhancement trade"""
+        print(f"\n{colorize_text('═══ BLACKSMITH FORGE ═══', 'red')}")
+        
+        if not player.inventory:
+            print(f"{colorize_text('No items to enhance.', 'yellow')}")
+            return
+            
+        enhancement_cost = 20
+        trust = player.npc_relationships[npc.name]["trust"]
+        
+        # Trust affects pricing
+        if trust > 20:
+            enhancement_cost = 15
+            print(f"{colorize_text('Friend discount applied!', 'green')}")
+        elif trust < -10:
+            enhancement_cost = 30
+            print(f"{colorize_text('Betrayer tax applied.', 'red')}")
+            
+        print(f"Enhancement cost: {enhancement_cost} Ashlight")
+        print(f"Your Ashlight: {colorize_text(str(player.ashlight), 'yellow')}\n")
+        
+        # Show inventory
+        for i, item in enumerate(player.inventory):
+            print(f"{i+1}. {colorize_text(item['name'], 'yellow')}")
+            
+        print(f"{len(player.inventory)+1}. {colorize_text('Leave', 'white')}")
+        
+        try:
+            choice = int(input(f"\n{colorize_text('Enhance item:', 'white')} ")) - 1
+            
+            if 0 <= choice < len(player.inventory):
+                if player.ashlight >= enhancement_cost:
+                    player.ashlight -= enhancement_cost
+                    
+                    # Enhance item stats
+                    item = player.inventory[choice]
+                    for stat in item["stats"]:
+                        if isinstance(item["stats"][stat], int):
+                            item["stats"][stat] += random.randint(1, 3)
+                    
+                    # Change name to show enhancement
+                    if "Enhanced" not in item["name"]:
+                        item["name"] = f"Enhanced {item['name']}"
+                        
+                    print(f"{colorize_text(item['name'] + ' has been enhanced!', 'green')}")
+                    player.interact_with_npc(npc.name, "trade")
+                else:
+                    print(f"{colorize_text('Not enough Ashlight.', 'red')}")
+            elif choice == len(player.inventory):
+                print(f"{colorize_text('You leave the forge.', 'white')}")
+            else:
+                print(f"{colorize_text('Invalid choice.', 'red')}")
+                
+        except ValueError:
+            print(f"{colorize_text('Invalid input.', 'red')}")
+    
+    def skill_trade(self, player, npc: NPC):
+        """Handle Still Flame Warden skill training"""
+        print(f"\n{colorize_text('═══ SKILL TRAINING ═══', 'cyan')}")
+        
+        available_skills = ["Neural Veil", "Feint Strike", "Void Resistance"]
+        skill_costs = {"Neural Veil": 0, "Feint Strike": 5, "Void Resistance": 10}
+        
+        print(f"Skill Points: {colorize_text(str(player.skill_points), 'cyan')}\n")
+        
+        for i, skill in enumerate(available_skills):
+            cost = skill_costs[skill]
+            status = "✓" if skill in player.skills else " "
+            print(f"{i+1}. [{status}] {colorize_text(skill, 'cyan')} - {cost} SP")
+            
+        print(f"{len(available_skills)+1}. {colorize_text('Leave', 'white')}")
+        
+        try:
+            choice = int(input(f"\n{colorize_text('Learn skill:', 'white')} ")) - 1
+            
+            if 0 <= choice < len(available_skills):
+                skill = available_skills[choice]
+                cost = skill_costs[skill]
+                
+                if skill not in player.skills:
+                    if player.skill_points >= cost:
+                        success = player.learn_skill(skill)
+                        if success:
+                            print(f"{colorize_text(f'Learned {skill}!', 'green')}")
+                            player.interact_with_npc(npc.name, "trade")
+                        else:
+                            print(f"{colorize_text('Requirements not met.', 'red')}")
+                    else:
+                        print(f"{colorize_text('Not enough skill points.', 'red')}")
+                else:
+                    print(f"{colorize_text('Skill already known.', 'yellow')}")
+            elif choice == len(available_skills):
+                print(f"{colorize_text('You leave the training grounds.', 'white')}")
+            else:
+                print(f"{colorize_text('Invalid choice.', 'red')}")
+                
+        except ValueError:
+            print(f"{colorize_text('Invalid input.', 'red')}")
+    
+    def handle_help(self, player, npc: NPC):
+        """Handle helping NPC"""
+        help_cost = random.randint(5, 15)
+        
+        if player.ashlight >= help_cost:
+            player.ashlight -= help_cost
+            player.interact_with_npc(npc.name, "help")
+            
+            # Generate helpful lore or benefit
+            benefit = self.generate_help_benefit(player, npc)
+            print(f"\n{colorize_text(benefit, 'green')}")
+        else:
+            print(f"{colorize_text(f'You need {help_cost} Ashlight to help.', 'red')}")
+    
+    def generate_help_benefit(self, player, npc: NPC) -> str:
+        """Generate benefit for helping NPC"""
+        benefits = {
+            "Lorekeeper": lambda: f"The Lorekeeper shares forbidden knowledge. +2 Sanity.",
+            "Blacktongue": lambda: f"Blacktongue gifts you a small enhancement. Random item improved.",
+            "Ash Sister": lambda: f"The Sister's riddle grants clarity. +3 Skill Points.",
+            "Faceless Merchant": lambda: f"The Merchant offers future discounts. Prices reduced 10%.",
+            "Still Flame Warden": lambda: f"The Warden's flame strengthens you. +5 Max Health.",
+            "The Hollowed": lambda: f"Your kindness to the forgotten is remembered. +1 to all stats."
+        }
+        
+        benefit_func = benefits.get(npc.name, lambda: "Your help is appreciated.")
+        benefit_text = benefit_func()
+        
+        # Apply actual benefits
+        if npc.name == "Lorekeeper":
+            player.sanity = min(100, player.sanity + 2)
+        elif npc.name == "Ash Sister":
+            player.skill_points += 3
+        elif npc.name == "Still Flame Warden":
+            player.max_health += 5
+            player.health += 5
+        elif npc.name == "The Hollowed":
+            for stat in player.stats:
+                player.stats[stat] += 1
+                
+        return benefit_text
+    
+    def handle_betrayal(self, player, npc: NPC):
+        """Handle player betraying NPC"""
+        print(f"\n{colorize_text('You strike treacherously!', 'red')}")
+        
+        # Immediate consequences
+        betrayal_damage = random.randint(10, 20)
+        ashlight_stolen = random.randint(15, 30)
+        
+        print(f"{colorize_text(f'Dealt {betrayal_damage} damage to {npc.name}!', 'red')}")
+        print(f"{colorize_text(f'Stolen {ashlight_stolen} Ashlight!', 'yellow')}")
+        
+        player.ashlight += ashlight_stolen
+        player.interact_with_npc(npc.name, "betray")
+        
+        # Relationship web consequences
+        self.propagate_betrayal(player, npc.name)
+        
+    def update_relationship_web(self, player, npc_name: str, interaction_type: str):
+        """Update NPC relationship web based on interaction"""
+        # Update direct relationship
+        player.interact_with_npc(npc_name, interaction_type)
+        
+        # Update NPC ally/enemy relationships based on base relationships
+        for (npc1, npc2), relationship_type in self.base_relationships.items():
+            if npc1 == npc_name or npc2 == npc_name:
+                other_npc = npc2 if npc1 == npc_name else npc1
+                player.add_npc_relationship(npc_name, other_npc, relationship_type)
+    
+    def propagate_betrayal(self, player, betrayed_npc: str):
+        """Propagate betrayal effects through relationship web"""
+        betrayed_relationship = player.npc_relationships[betrayed_npc]
+        
+        # Allies of betrayed NPC lose trust
+        for ally in betrayed_relationship.get("allies", []):
+            if ally in player.npc_relationships:
+                player.npc_relationships[ally]["trust"] -= 15
+                print(f"{colorize_text(f'{ally} learns of your betrayal and loses trust.', 'red')}")
+        
+        # Enemies of betrayed NPC might gain slight trust
+        for enemy in betrayed_relationship.get("enemies", []):
+            if enemy in player.npc_relationships:
+                player.npc_relationships[enemy]["trust"] += 5
+                print(f"{colorize_text(f'{enemy} seems pleased by the betrayal.', 'yellow')}")
+    
+    def get_available_npcs(self, floor: int) -> List[str]:
+        """Get NPCs available on current floor"""
+        floor_npcs = {
+            1: ["Lorekeeper", "Faceless Merchant"],
+            2: ["Blacktongue", "Still Flame Warden"], 
+            3: ["Ash Sister", "The Hollowed"],
+            4: ["Blacktongue", "Lorekeeper"],  # Some NPCs appear on multiple floors
+            5: []  # No regular NPCs on Entity floor
+        }
+        
+        return floor_npcs.get(floor, [])
+    
+    def show_relationship_status(self, player):
+        """Show current relationship web status"""
+        print(f"\n{colorize_text('═══ RELATIONSHIP WEB ═══', 'cyan')}")
+        
+        for npc_name, relationship in player.npc_relationships.items():
+            trust = relationship["trust"]
+            
+            if trust > 30:
+                status = colorize_text("Trusted Ally", 'green')
+            elif trust > 10:
+                status = colorize_text("Friend", 'green') 
+            elif trust > -10:
+                status = colorize_text("Neutral", 'yellow')
+            elif trust > -30:
+                status = colorize_text("Distrustful", 'red')
+            else:
+                status = colorize_text("Enemy", 'red')
+                
+            print(f"{npc_name}: {status} ({trust} trust)")
+            
+            # Show allies/enemies
+            if relationship["allies"]:
+                allies = ", ".join(relationship["allies"])
+                print(f"  Allies: {colorize_text(allies, 'green')}")
+            if relationship["enemies"]:
+                enemies = ", ".join(relationship["enemies"])
+                print(f"  Enemies: {colorize_text(enemies, 'red')}")
+        
+        press_enter_to_continue()
+
+class SpecialNPC(NPC):
+    """Special NPCs with unique mechanics"""
+    
+    def __init__(self, name: str, npc_type: str, entity_ai, special_ability: str):
+        super().__init__(name, npc_type, entity_ai)
+        self.special_ability = special_ability
+        
+    def trigger_special_ability(self, player) -> str:
+        """Trigger NPC's special ability"""
+        if self.special_ability == "echo_memory":
+            # The Hollowed shows player their past failures
+            if player.deaths > 0:
+                echo_lore = self.entity_ai.generate_lore(
+                    player.state_vector(),
+                    player.floor,
+                    "past_death_echo"
+                )
+                return f"The Hollowed speaks: '{echo_lore}'"
+                
+        elif self.special_ability == "entity_whisper":
+            # Direct Entity communication
+            entity_whisper = self.entity_ai.generate_whisper(player.state_vector(), "entity_direct")
+            return f"The Entity speaks through {self.name}: '{entity_whisper}'"
+            
+        elif self.special_ability == "predictability_read":
+            # Ash Sister reads player predictability
+            pred = player.predictability
+            if pred > 0.8:
+                return "The Sister peers into your patterns: 'So... predictable. The Entity feeds.'"
+            elif pred < 0.3:
+                return "The Sister nods approvingly: 'Chaos walks with you. Good.'"
+            else:
+                return "The Sister tilts her head: 'Your patterns... shift. Intriguing.'"
+                
+        return "Nothing happens."

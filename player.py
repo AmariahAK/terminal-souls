@@ -1,345 +1,360 @@
 import random
-from typing import Dict, List, Optional, Tuple
-from entity import memory_engine
+import json
+import time
+import numpy as np
+from typing import Dict, List, Any
+from collections import deque
 
 class Player:
-    """
-    Player system with stats, classes, progression, and memory integration.
-    The player is not just a character. They're a habit engine - tracked, judged, evolved.
-    """
-    
-    def __init__(self):
-        self.stats = {"STR": 10, "DEX": 10, "INT": 10, "FTH": 10, "END": 10, "VIT": 10}
-        self.base_stats = self.stats.copy()
-        self.hp = 100
-        self.max_hp = 100
-        self.stamina = 100  
-        self.max_stamina = 100
-        self.ashlight = 0
-        self.class_name = ""
-        self.class_passive = {}
-        self.weapon = {}
-        self.skills = {"passive": None, "active": None, "hybrid": None}
-        self.inventory = []
-        self.floor = 1
-        self.current_weapon_type = ""
-        self.action_sequence = []  # Track recent actions for pattern analysis
+    def __init__(self, name: str, player_class: str):
+        self.name = name
+        self.player_class = player_class
         
-    def select_class(self, class_choice: int) -> Dict:
-        """Select starting class and apply bonuses"""
-        classes = {
-            1: {
-                "name": "Ash Dancer",
-                "stats": {"STR": 8, "DEX": 16, "INT": 10, "FTH": 8, "END": 14, "VIT": 12},
-                "passive": {"name": "Ethereal Step", "effect": "10% chance to evade any hit"},
-                "weapon": {"name": "Twinblades", "type": "Twinblades", "damage": 25, "speed": "Fast"},
-                "item": {"name": "Smoke Bomb", "uses": 3, "effect": "Blind enemy for 1 turn"},
-                "flavor": "Swift as shadow, deadly as memory."
-            },
-            2: {
-                "name": "Gravebound",
-                "stats": {"STR": 14, "DEX": 8, "INT": 8, "FTH": 12, "END": 16, "VIT": 16},
-                "passive": {"name": "Deathward", "effect": "10% damage reduction from all sources"},
-                "weapon": {"name": "Bone Greatblade", "type": "Greatblade", "damage": 40, "speed": "Slow"},
-                "item": {"name": "Grave Dust", "uses": 2, "effect": "Heal 30 HP over 3 turns"},
-                "flavor": "Born from death, returning to death."
-            },
-            3: {
-                "name": "Soul Leech",
-                "stats": {"STR": 10, "DEX": 12, "INT": 14, "FTH": 10, "END": 12, "VIT": 10},
-                "passive": {"name": "Vampiric", "effect": "5% HP regain on kill"},
-                "weapon": {"name": "Soulbane Dagger", "type": "Claw Daggers", "damage": 20, "speed": "Very Fast"},
-                "item": {"name": "Blood Vial", "uses": 4, "effect": "Heal 15 HP instantly"},
-                "flavor": "Hunger defines you. Feast defines your enemies."
-            },
-            4: {
-                "name": "Void Prophet",
-                "stats": {"STR": 8, "DEX": 10, "INT": 18, "FTH": 14, "END": 10, "VIT": 8},
-                "passive": {"name": "Void Sight", "effect": "See enemy weaknesses, +15% crit chance"},
-                "weapon": {"name": "Spell Knife", "type": "Spell Knife", "damage": 30, "speed": "Medium"},
-                "item": {"name": "Echo Flask", "uses": 3, "effect": "Copy enemy's last attack"},
-                "flavor": "The void whispers. You listen. Others scream."
-            },
-            5: {
-                "name": "Faith Broken",
-                "stats": {"STR": 12, "DEX": 8, "INT": 8, "FTH": 18, "END": 14, "VIT": 12},
-                "passive": {"name": "Martyr's Resolve", "effect": "Deal +50% damage when below 25% HP"},
-                "weapon": {"name": "Shattered Faith Hammer", "type": "Faith Hammer", "damage": 38, "speed": "Slow"},
-                "item": {"name": "Broken Prayer", "uses": 2, "effect": "Reduce enemy damage by 50% for 2 turns"},
-                "flavor": "Your god abandoned you. Now you abandon mercy."
-            },
-            6: {
-                "name": "Wretched",
-                "stats": {"STR": 12, "DEX": 12, "INT": 12, "FTH": 12, "END": 12, "VIT": 12},
-                "passive": {"name": "Underdog", "effect": "All stats +2 when fighting stronger enemies"},
-                "weapon": {"name": "Bonk Stick", "type": "Bonk Stick", "damage": 15, "speed": "Meme"},
-                "item": {"name": "Nothing", "uses": 0, "effect": "Disappointment"},
-                "flavor": "You have nothing. You are nothing. Perfect."
-            }
+        # Base stats
+        self.stats = {
+            "str": 10,
+            "dex": 10,
+            "int": 10,
+            "fth": 10,
+            "end": 10,
+            "vit": 10
         }
         
-        if class_choice not in classes:
-            class_choice = 6  # Default to Wretched
+        # Apply class bonuses
+        self.apply_class_bonuses()
+        
+        # Derived stats
+        self.health = self.stats["vit"] * 10
+        self.max_health = self.health
+        self.stamina = self.stats["end"] * 10
+        self.max_stamina = self.stamina
+        
+        # Game state
+        self.floor = 1
+        self.ashlight = 50
+        self.inventory = []
+        self.equipped_weapon = None
+        
+        # AI tracking metrics - NEW
+        self.sanity = 100.0  # Hidden stat, decreases with deaths/traps/betrayals
+        self.predictability = 0.5  # Increases with repetitive actions
+        self.deaths = 0
+        self.ally_count = 0
+        self.flee_count = 0
+        self.explore_count = 0
+        self.heal_spam_count = 0
+        self.mob_farm_count = 0
+        self.betrayal_count = 0
+        
+        # Action tracking for predictability
+        self.action_history = deque(maxlen=20)  # Rolling window of recent actions
+        self.last_action = None
+        self.action_repetition = 0
+        
+        # Relationship web - NEW
+        self.npc_relationships = {
+            "Lorekeeper": {"trust": 0, "allies": [], "enemies": []},
+            "Blacktongue": {"trust": 0, "allies": [], "enemies": []},
+            "Ash Sister": {"trust": 0, "allies": [], "enemies": []},
+            "Faceless Merchant": {"trust": 0, "allies": [], "enemies": []},
+            "Still Flame Warden": {"trust": 0, "allies": [], "enemies": []},
+            "The Hollowed": {"trust": 0, "allies": [], "enemies": []}
+        }
+        
+        # Skills
+        self.skills = []
+        self.skill_points = 0
+        
+    def apply_class_bonuses(self):
+        """Apply class-specific stat bonuses"""
+        class_bonuses = {
+            "Warrior": {"str": 3, "end": 2},
+            "Rogue": {"dex": 3, "int": 1},
+            "Sorcerer": {"int": 3, "fth": 1},
+            "Cleric": {"fth": 3, "vit": 2},
+            "Knight": {"vit": 2, "end": 2},
+            "Hollow": {}  # Balanced but gets penalties after 5 deaths
+        }
+        
+        bonuses = class_bonuses.get(self.player_class, {})
+        for stat, bonus in bonuses.items():
+            self.stats[stat] += bonus
             
-        chosen_class = classes[class_choice]
-        
-        # Apply class stats
-        self.stats = chosen_class["stats"].copy()
-        self.base_stats = self.stats.copy()
-        self.class_name = chosen_class["name"]
-        self.class_passive = chosen_class["passive"]
-        self.weapon = chosen_class["weapon"]
-        self.current_weapon_type = chosen_class["weapon"]["type"]
-        self.inventory = [chosen_class["item"]]
-        
-        # Calculate derived stats
-        self._update_derived_stats()
-        
-        # Track class selection in memory
-        memory_engine.set("class_selected", self.class_name)
-        memory_engine.add_to_list("class_history", self.class_name)
-        memory_engine.set("stat_spread", self.stats)
-        
-        return chosen_class
+        # Hollow special: -1 to all stats after 5 deaths
+        if self.player_class == "Hollow" and self.deaths >= 5:
+            for stat in self.stats:
+                self.stats[stat] = max(1, self.stats[stat] - 1)
     
-    def _update_derived_stats(self):
-        """Update HP, stamina, etc. based on current stats"""
-        self.max_hp = 50 + (self.stats["VIT"] * 5)
-        self.max_stamina = 50 + (self.stats["END"] * 3)
-        self.hp = min(self.hp, self.max_hp)
-        self.stamina = min(self.stamina, self.max_stamina)
-    
-    def spend_ashlight(self, stat: str, amount: int = 1) -> bool:
-        """Spend ashlight to increase a stat"""
-        cost = self.stats[stat] * 2  # Cost increases with current stat level
+    def state_vector(self) -> List[float]:
+        """Generate 14-dimensional state vector for EntityAI"""
+        # Normalize stats to 0-1 range (assuming max reasonable stat is 20)
+        normalized_stats = [min(1.0, stat / 20.0) for stat in self.stats.values()]
         
-        if self.ashlight >= cost:
-            self.ashlight -= cost
-            self.stats[stat] += amount
-            self._update_derived_stats()
+        # Class one-hot encoding (simplified to 4 bits)
+        class_encoding = [0.0, 0.0, 0.0, 0.0]
+        class_map = {"Warrior": 0, "Rogue": 1, "Sorcerer": 2, "Cleric": 3}
+        if self.player_class in class_map:
+            class_encoding[class_map[self.player_class]] = 1.0
+        
+        # Recent action ID (0-1 normalized)
+        action_id = hash(self.last_action or "none") % 100 / 100.0
+        
+        # Metrics (normalized)
+        predictability = min(1.0, self.predictability)
+        sanity = min(1.0, self.sanity / 100.0)
+        deaths = min(1.0, self.deaths / 10.0)
+        ally_count = min(1.0, self.ally_count / 6.0)
+        flee_count = min(1.0, self.flee_count / 20.0)
+        
+        # Additional metrics for extended vector
+        explore_ratio = min(1.0, self.explore_count / 50.0)
+        heal_spam_ratio = min(1.0, self.heal_spam_count / 10.0)
+        farm_ratio = min(1.0, self.mob_farm_count / 20.0)
+        
+        vector = (normalized_stats + 
+                 [min(1.0, self.floor / 5.0)] + 
+                 class_encoding + 
+                 [action_id, predictability, sanity, deaths, ally_count, flee_count] +
+                 [explore_ratio, heal_spam_ratio, farm_ratio])
+        
+        return vector
+    
+    def update_predictability(self, action: str):
+        """Update predictability based on action patterns"""
+        self.action_history.append(action)
+        
+        if action == self.last_action:
+            self.action_repetition += 1
+        else:
+            self.action_repetition = 0
             
-            # Track stat progression in memory
-            memory_engine.set("stat_spread", self.stats)
-            return True
-        return False
+        self.last_action = action
+        
+        # Calculate variance in recent actions
+        if len(self.action_history) >= 10:
+            # Simple entropy calculation
+            action_counts = {}
+            for a in self.action_history:
+                action_counts[a] = action_counts.get(a, 0) + 1
+            
+            # Higher entropy = lower predictability
+            total_actions = len(self.action_history)
+            entropy = 0
+            for count in action_counts.values():
+                prob = count / total_actions
+                entropy -= prob * np.log2(prob) if prob > 0 else 0
+            
+            # Normalize entropy to predictability (inverse relationship)
+            max_entropy = np.log2(len(action_counts))
+            if max_entropy > 0:
+                self.predictability = 1.0 - (entropy / max_entropy)
+            
+        # Penalize repetitive actions
+        if self.action_repetition > 3:
+            self.predictability = min(1.0, self.predictability + 0.1)
+        
+        # Reward variance
+        if len(set(list(self.action_history)[-5:])) >= 4:
+            self.predictability = max(0.0, self.predictability - 0.05)
     
-    def gain_ashlight(self, amount: int):
-        """Gain ashlight from defeating enemies"""
-        self.ashlight += amount
-    
-    def roll_skill(self) -> Dict:
-        """Roll for a random skill at level up"""
-        passive_skills = [
-            {"name": "Iron Will", "effect": "+5% crit chance", "type": "passive"},
-            {"name": "Efficient Movement", "effect": "-10% stamina use", "type": "passive"},
-            {"name": "Blood Memory", "effect": "+2 damage per enemy killed this floor", "type": "passive"},
-            {"name": "Void Resistance", "effect": "+15% resistance to all status effects", "type": "passive"},
-            {"name": "Battle Rhythm", "effect": "Stamina regen +2 per turn", "type": "passive"},
-        ]
+    def take_damage(self, amount: int, damage_type: str = "physical"):
+        """Take damage and update metrics"""
+        self.health -= amount
         
-        active_skills = [
-            {"name": "Dash Slash", "effect": "DEX-based gap closer with high crit", "cooldown": 3, "type": "active"},
-            {"name": "Healing Chant", "effect": "Heal 25 HP over 3 turns", "cooldown": 5, "type": "active"},
-            {"name": "Phase Step", "effect": "Avoid next hit guaranteed", "cooldown": 4, "type": "active"},
-            {"name": "Berserker Rage", "effect": "+100% damage for 2 turns, -50% defense", "cooldown": 6, "type": "active"},
-            {"name": "Soul Burn", "effect": "INT-based magic attack, ignores armor", "cooldown": 3, "type": "active"},
-        ]
+        # Sanity loss from taking damage
+        if amount > 5:
+            self.sanity = max(0, self.sanity - 1)
         
-        hybrid_skills = [
-            {"name": "Fire Roll", "effect": "Dodge + burn nearby enemies", "cooldown": 4, "type": "hybrid"},
-            {"name": "Parry Counter", "effect": "Perfect block triggers automatic counter", "cooldown": 3, "type": "hybrid"},
-            {"name": "Weapon Dance", "effect": "Each different attack type increases damage", "cooldown": 0, "type": "hybrid"},
-            {"name": "Shadow Step", "effect": "Dodge grants invisibility for 1 turn", "cooldown": 5, "type": "hybrid"},
-            {"name": "Life Tap", "effect": "Spend HP to restore stamina", "cooldown": 2, "type": "hybrid"},
-        ]
-        
-        all_skills = passive_skills + active_skills + hybrid_skills
-        skill = random.choice(all_skills)
-        
-        # Track skill in memory
-        memory_engine.add_to_list("skills_unlocked", skill["name"])
-        
-        return skill
-    
-    def equip_skill(self, skill: Dict, slot: str) -> bool:
-        """Equip a skill to a specific slot"""
-        if slot in ["passive", "active", "hybrid"] and skill["type"] == slot:
-            self.skills[slot] = skill
-            return True
-        return False
-    
-    def use_item(self, item_name: str) -> Dict:
-        """Use an item from inventory"""
-        for item in self.inventory:
-            if item["name"] == item_name and item["uses"] > 0:
-                item["uses"] -= 1
-                
-                # Track item usage in memory
-                memory_engine.track_combat_action("item")
-                memory_engine.increment("item_usage_count")
-                
-                # Apply item effect
-                effect_result = self._apply_item_effect(item)
-                
-                # Remove item if used up
-                if item["uses"] <= 0 and item["name"] != "Nothing":
-                    self.inventory.remove(item)
-                
-                return {"success": True, "effect": effect_result}
-        
-        return {"success": False, "message": "Item not available"}
-    
-    def _apply_item_effect(self, item: Dict) -> str:
-        """Apply the effect of using an item"""
-        effect = item["effect"]
-        
-        if "Heal" in effect:
-            if "instantly" in effect:
-                heal_amount = int(''.join(filter(str.isdigit, effect)))
-                self.hp = min(self.hp + heal_amount, self.max_hp)
-                return f"Healed {heal_amount} HP instantly"
-            elif "over" in effect:
-                return f"Healing over time effect applied"
-        elif "Blind" in effect:
-            return "Enemy blinded for 1 turn"
-        elif "Reduce enemy damage" in effect:
-            return "Enemy damage reduced by 50% for 2 turns"
-        elif "Copy enemy's last attack" in effect:
-            return "Enemy attack copied and ready to use"
-        elif "Disappointment" in effect:
-            return "You feel disappointed. Nothing happens."
-        
-        return "Item used"
-    
-    def take_damage(self, damage: int) -> bool:
-        """Take damage, return True if still alive"""
-        # Apply class passive effects
-        if self.class_passive["name"] == "Deathward":
-            damage = int(damage * 0.9)  # 10% damage reduction
-        
-        self.hp -= damage
-        return self.hp > 0
+        if self.health <= 0:
+            self.die()
     
     def heal(self, amount: int):
-        """Heal HP"""
-        self.hp = min(self.hp + amount, self.max_hp)
+        """Heal and track healing patterns"""
+        old_health = self.health
+        self.health = min(self.max_health, self.health + amount)
+        
+        # Track heal spam
+        if old_health / self.max_health > 0.7:  # Healing when mostly healthy
+            self.heal_spam_count += 1
+            
+        # Sanity restoration from healing (small amount)
+        if amount > 0:
+            self.sanity = min(100, self.sanity + 1)
     
-    def use_stamina(self, amount: int) -> bool:
-        """Use stamina for actions"""
-        if self.stamina >= amount:
-            self.stamina -= amount
-            return True
-        return False
+    def flee_encounter(self):
+        """Handle fleeing from combat"""
+        self.flee_count += 1
+        self.sanity = max(0, self.sanity - 2)
+        self.update_predictability("flee")
     
-    def regen_stamina(self, amount: int = None):
-        """Regenerate stamina"""
-        if amount is None:
-            base_regen = 5 + (self.stats["END"] // 3)
-            # Apply skill bonuses
-            if self.skills["passive"] and "stamina regen" in self.skills["passive"]["effect"]:
-                base_regen += 2
-            amount = base_regen
+    def explore_room(self):
+        """Track exploration behavior"""
+        self.explore_count += 1
+        self.update_predictability("explore")
         
-        self.stamina = min(self.stamina + amount, self.max_stamina)
+        # Slight sanity gain from exploration (discovery)
+        self.sanity = min(100, self.sanity + 0.5)
     
-    def track_action(self, action: str, weapon_type: str = None):
-        """Track player action for memory system"""
-        self.action_sequence.append(action)
+    def kill_mob(self, mob_name: str):
+        """Track mob kills for farming detection"""
+        if "echo" in mob_name.lower() or "fragment" in mob_name.lower():
+            self.mob_farm_count += 1
         
-        # Keep only recent actions for pattern analysis
-        if len(self.action_sequence) > 10:
-            self.action_sequence.pop(0)
-        
-        # Track in memory engine
-        memory_engine.track_combat_action(action, weapon_type or self.current_weapon_type)
-        memory_engine.track_repeat_actions(self.action_sequence)
+        self.update_predictability("kill")
     
-    def start_combat(self):
-        """Reset per-combat state"""
-        self.action_sequence = []
-    
-    def end_combat(self, won: bool = True):
-        """Handle end of combat"""
-        if won and self.class_passive["name"] == "Vampiric":
-            heal_amount = int(self.max_hp * 0.05)
-            self.heal(heal_amount)
-        
-        # Track behavior pattern
-        if self.action_sequence:
-            memory_engine.track_behavior_pattern(
-                self.action_sequence[0], 
-                len(self.action_sequence)
-            )
-    
-    def level_up_at_hearth(self) -> Dict:
-        """Level up at a Hearth of Still Flame"""
-        if self.ashlight <= 0:
-            return {"success": False, "message": "No Ashlight to spend"}
-        
-        # Show available stats to upgrade
-        stat_costs = {}
-        for stat in self.stats:
-            stat_costs[stat] = self.stats[stat] * 2
-        
-        return {
-            "success": True, 
-            "stats": self.stats,
-            "costs": stat_costs,
-            "ashlight": self.ashlight,
-            "can_roll_skill": True
-        }
-    
-    def get_weapon_damage(self) -> int:
-        """Calculate weapon damage based on stats"""
-        base_damage = self.weapon["damage"]
-        weapon_type = self.weapon["type"]
-        
-        # Apply stat scaling
-        if weapon_type in ["Greatblade", "Faith Hammer"]:
-            scaling = self.stats["STR"] // 2
-        elif weapon_type in ["Twinblades", "Claw Daggers"]:
-            scaling = self.stats["DEX"] // 2
-        elif weapon_type == "Spell Knife":
-            scaling = self.stats["INT"] // 2
-        else:
-            scaling = (self.stats["STR"] + self.stats["DEX"]) // 4
-        
-        total_damage = base_damage + scaling
-        
-        # Apply passive bonuses
-        if self.class_passive["name"] == "Martyr's Resolve" and self.hp < (self.max_hp * 0.25):
-            total_damage = int(total_damage * 1.5)
-        
-        return total_damage
-    
-    def get_status(self) -> str:
-        """Get formatted player status"""
-        dodge_pref = memory_engine.get_dodge_preference()
-        behavior = memory_engine.get_behavior_type()
-        
-        return f"""
-=== {self.class_name} ===
-HP: {self.hp}/{self.max_hp} | Stamina: {self.stamina}/{self.max_stamina}
-STR:{self.stats['STR']} DEX:{self.stats['DEX']} INT:{self.stats['INT']} FTH:{self.stats['FTH']} END:{self.stats['END']} VIT:{self.stats['VIT']}
-Ashlight: {self.ashlight}
-Weapon: {self.weapon['name']} ({self.get_weapon_damage()} damage)
-Passive: {self.class_passive['name']} - {self.class_passive['effect']}
-
-Floor: {self.floor}
-The Entity knows: You dodge {dodge_pref}, you fight {behavior}ly
-        """
-    
-    def die(self, killer: str = None, floor: int = None):
+    def die(self):
         """Handle player death"""
-        memory_engine.record_death(killer, floor or self.floor)
-        
-        # Reset for new run but keep memory
-        self.hp = self.max_hp
+        self.deaths += 1
+        self.health = self.max_health
         self.stamina = self.max_stamina
         self.floor = 1
-        self.ashlight = 0
-        self.action_sequence = []
-        memory_engine.reset_run_data()
-
-# Create global player instance
-player = Player()
+        
+        # Major sanity loss on death
+        self.sanity = max(0, self.sanity - 10)
+        
+        # Reset some temporary metrics
+        self.ashlight = max(10, self.ashlight // 2)
+        self.inventory = []
+        
+        # Apply Hollow class penalty
+        if self.player_class == "Hollow" and self.deaths >= 5:
+            self.apply_class_bonuses()
+    
+    def interact_with_npc(self, npc_name: str, interaction_type: str):
+        """Update NPC relationships based on interactions"""
+        if npc_name not in self.npc_relationships:
+            return
+            
+        relationship = self.npc_relationships[npc_name]
+        
+        if interaction_type == "help":
+            relationship["trust"] += 10
+            self.sanity = min(100, self.sanity + 2)
+            
+        elif interaction_type == "betray":
+            relationship["trust"] -= 30
+            self.betrayal_count += 1
+            self.sanity = max(0, self.sanity - 5)
+            
+            # Propagate betrayal to allies
+            for ally_name in relationship["allies"]:
+                if ally_name in self.npc_relationships:
+                    self.npc_relationships[ally_name]["trust"] -= 10
+                    
+        elif interaction_type == "trade":
+            relationship["trust"] += 2
+            
+        elif interaction_type == "ignore":
+            relationship["trust"] -= 1
+        
+        # Update ally count
+        self.ally_count = sum(1 for rel in self.npc_relationships.values() if rel["trust"] > 20)
+    
+    def add_npc_relationship(self, npc1: str, npc2: str, relationship_type: str):
+        """Add relationships between NPCs"""
+        if npc1 in self.npc_relationships and npc2 in self.npc_relationships:
+            if relationship_type == "ally":
+                if npc2 not in self.npc_relationships[npc1]["allies"]:
+                    self.npc_relationships[npc1]["allies"].append(npc2)
+                if npc1 not in self.npc_relationships[npc2]["allies"]:
+                    self.npc_relationships[npc2]["allies"].append(npc1)
+                    
+            elif relationship_type == "enemy":
+                if npc2 not in self.npc_relationships[npc1]["enemies"]:
+                    self.npc_relationships[npc1]["enemies"].append(npc2)
+                if npc1 not in self.npc_relationships[npc2]["enemies"]:
+                    self.npc_relationships[npc2]["enemies"].append(npc1)
+    
+    def use_skill(self, skill_name: str) -> bool:
+        """Use a learned skill"""
+        if skill_name not in self.skills:
+            return False
+            
+        if skill_name == "Neural Veil":
+            # Costs 10 Ashlight, adds noise to state vector, restores sanity
+            if self.ashlight >= 10:
+                self.ashlight -= 10
+                self.sanity = min(100, self.sanity + 2)
+                # Add temporary noise to confuse EntityAI
+                self.update_predictability("neural_veil")
+                return True
+                
+        elif skill_name == "Essence Drain":
+            # Hollow class special
+            if self.player_class == "Hollow":
+                # Steal stamina from enemy (implementation in combat)
+                self.update_predictability("essence_drain")
+                return True
+                
+        return False
+    
+    def learn_skill(self, skill_name: str) -> bool:
+        """Learn a new skill"""
+        skill_requirements = {
+            "Neural Veil": {"deaths": 3, "cost": 0},  # Unlocked after 3 deaths
+            "Feint Strike": {"predictability": 0.3, "cost": 5},  # Low predictability required
+            "Void Resistance": {"sanity": 30, "cost": 10},  # Learn when sanity is low
+        }
+        
+        if skill_name in skill_requirements:
+            req = skill_requirements[skill_name]
+            
+            # Check requirements
+            can_learn = True
+            if "deaths" in req and self.deaths < req["deaths"]:
+                can_learn = False
+            if "predictability" in req and self.predictability > req["predictability"]:
+                can_learn = False
+            if "sanity" in req and self.sanity > req["sanity"]:
+                can_learn = False
+                
+            if can_learn and self.skill_points >= req["cost"]:
+                self.skills.append(skill_name)
+                self.skill_points -= req["cost"]
+                return True
+                
+        return False
+    
+    def get_status_summary(self) -> Dict[str, Any]:
+        """Get current player status for display"""
+        return {
+            "name": self.name,
+            "class": self.player_class,
+            "floor": self.floor,
+            "health": f"{self.health}/{self.max_health}",
+            "stamina": f"{self.stamina}/{self.max_stamina}",
+            "ashlight": self.ashlight,
+            "stats": self.stats,
+            "skills": self.skills,
+            "deaths": self.deaths,
+            "allies": self.ally_count,
+            # Hidden from player normally
+            "predictability": f"{self.predictability:.2f}",
+            "sanity": f"{self.sanity:.1f}" if self.sanity < 50 else "Stable"
+        }
+    
+    def apply_neural_veil_noise(self) -> List[float]:
+        """Apply Neural Veil noise to confuse EntityAI"""
+        base_vector = self.state_vector()
+        if "Neural Veil" in self.skills:
+            # Add 0.1-0.2 noise to stats only
+            noise = np.random.uniform(-0.2, 0.2, 6)  # Only for the 6 main stats
+            noisy_vector = base_vector.copy()
+            for i in range(6):
+                noisy_vector[i] = max(0, min(1, noisy_vector[i] + noise[i]))
+            return noisy_vector
+        return base_vector
+    
+    def get_ending_metrics(self) -> Dict[str, Any]:
+        """Get metrics for ending determination"""
+        return {
+            "predictability": self.predictability,
+            "sanity": self.sanity,
+            "deaths": self.deaths,
+            "ally_count": self.ally_count,
+            "betrayals": self.betrayal_count,
+            "flee_count": self.flee_count,
+            "total_trust": sum(rel["trust"] for rel in self.npc_relationships.values()),
+            "class": self.player_class,
+            "floor_reached": self.floor
+        }

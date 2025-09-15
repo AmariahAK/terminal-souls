@@ -1,487 +1,430 @@
 import random
-from typing import Dict, List, Optional, Tuple
-from entity import memory_engine
-from combat import get_floor_enemy, combat_system
-from npc import npc_system
-import utils
+import json
+from typing import Dict, List, Any, Optional, Tuple
+
+from utils import colorize_text, narrator_filter
 
 class Room:
-    """Individual room with encounters, hazards, and events"""
+    """Individual room with AI-generated content"""
     
-    def __init__(self, room_type: str, floor: int):
-        self.room_type = room_type  # combat, npc, boss, hearth, hazard, secret
+    def __init__(self, room_id: str, floor: int, entity_ai):
+        self.room_id = room_id
         self.floor = floor
+        self.entity_ai = entity_ai
         self.visited = False
-        self.enemies = []
-        self.hazards = []
-        self.npcs = []
-        self.loot = {}
+        self.cleared = False
+        self.connections = []
+        self.contents = {}
+        self.trap = None
         self.description = ""
-        self.flavor_text = ""
         
-    def enter(self, player) -> Dict:
-        """Enter room and handle encounters"""
-        self.visited = True
-        result = {"continue": True, "events": []}
+    def generate_content(self, player_vector: List[float]):
+        """Generate room content based on player state"""
+        # Base room description
+        self.description = self.get_base_description()
         
-        # Display room
-        utils.clear_screen()
-        print(utils.colored_text(f"=== FLOOR {self.floor}: {self.description} ===", "cyan"))
-        print(self.flavor_text)
+        # Check for trap generation
+        layout_data = self.entity_ai.generate_layout(player_vector, self.floor)
+        trap_chance = layout_data.get("trap_chance", 0.1)
         
-        # Handle room type
-        if self.room_type == "combat":
-            result = self._handle_combat(player)
-        elif self.room_type == "npc":
-            result = self._handle_npc(player)
-        elif self.room_type == "boss":
-            result = self._handle_boss(player)
-        elif self.room_type == "hearth":
-            result = self._handle_hearth(player)
-        elif self.room_type == "hazard":
-            result = self._handle_hazard(player)
-        elif self.room_type == "secret":
-            result = self._handle_secret(player)
-            
-        return result
-    
-    def _handle_combat(self, player) -> Dict:
-        """Handle combat encounter"""
-        if not self.enemies:
-            # Generate enemy based on floor
-            enemy = get_floor_enemy(self.floor)
-            self.enemies.append(enemy)
+        if random.random() < trap_chance:
+            self.trap = self.entity_ai.generate_trap(player_vector, self.floor)
         
-        enemy = self.enemies[0]
-        print(f"\n{utils.colored_text(f'⚔️ {enemy.name} blocks your path!', 'red')}")
+        # Generate possible contents
+        self.generate_room_contents(player_vector)
         
-        # Start combat
-        victory = combat_system.start_combat(enemy, player)
-        
-        if victory:
-            # Grant rewards
-            ashlight_gain = random.randint(10, 25) + (self.floor * 5)
-            player.gain_ashlight(ashlight_gain)
-            print(f"\n💰 Gained {ashlight_gain} Ashlight")
-            
-            return {"continue": True, "events": ["combat_victory"]}
-        else:
-            # Player died
-            player.die(enemy.name, self.floor)
-            return {"continue": False, "events": ["death"]}
-    
-    def _handle_npc(self, player) -> Dict:
-        """Handle NPC encounter"""
-        if not self.npcs:
-            # Select appropriate NPC for floor
-            npc_name = self._select_floor_npc()
-            self.npcs.append(npc_name)
-        
-        npc_name = self.npcs[0]
-        
-        # Check if NPC was betrayed
-        if memory_engine.is_betrayed(npc_name):
-            print(f"💨 {npc_name} is nowhere to be found. Your betrayal echoes in the empty space.")
-            return {"continue": True, "events": ["npc_absent"]}
-        
-        # Handle NPC interaction
-        print(f"\n👤 You encounter {npc_name}")
-        interaction_result = npc_system.interact_with_npc(npc_name)
-        
-        if "error" in interaction_result:
-            print(interaction_result["error"])
-        else:
-            print(f"\n{interaction_result['dialogue']}")
-            
-            if interaction_result["choices"]:
-                print("\nOptions:")
-                for i, choice in enumerate(interaction_result["choices"], 1):
-                    print(f"[{i}] {choice}")
-                
-                choice_input = input("Choose: ").strip()
-                try:
-                    choice_num = int(choice_input)
-                    if 1 <= choice_num <= len(interaction_result["choices"]):
-                        chosen = interaction_result["choices"][choice_num - 1]
-                        print(f"\nYou: \"{chosen}\"")
-                        # Track choice in memory
-                        memory_engine.update_npc_interaction(npc_name, "choice", chosen)
-                except ValueError:
-                    print("Invalid choice.")
-        
-        return {"continue": True, "events": ["npc_interaction"]}
-    
-    def _handle_boss(self, player) -> Dict:
-        """Handle boss encounter"""
-        # Boss logic would be implemented here
-        # For now, placeholder
-        print(f"\n💀 BOSS ENCOUNTER - Floor {self.floor}")
-        print("Boss system not yet implemented in this room handler")
-        return {"continue": True, "events": ["boss_placeholder"]}
-    
-    def _handle_hearth(self, player) -> Dict:
-        """Handle Hearth of Still Flame (leveling station)"""
-        print(f"\n🔥 {utils.colored_text('Hearth of Still Flame', 'yellow')}")
-        print("The flames dance with memories of those who came before.")
-        print("Here, you may spend Ashlight to grow stronger... if you have the will.")
-        
-        while True:
-            # Show current status
-            print(f"\n{player.get_status()}")
-            
-            print("\nOptions:")
-            print("[1] Level up stats")
-            print("[2] Roll for new skill")
-            print("[3] Rest (restore HP/Stamina)")
-            print("[4] Leave")
-            
-            choice = input("Choose: ").strip()
-            
-            if choice == "1":
-                self._handle_stat_leveling(player)
-            elif choice == "2":
-                self._handle_skill_roll(player)
-            elif choice == "3":
-                player.hp = player.max_hp
-                player.stamina = player.max_stamina
-                print("💚 You feel refreshed by the eternal flame.")
-            elif choice == "4":
-                break
-            else:
-                print("Invalid choice.")
-        
-        return {"continue": True, "events": ["hearth_visit"]}
-    
-    def _handle_hazard(self, player) -> Dict:
-        """Handle environmental hazard"""
-        hazard_type = random.choice(self._get_floor_hazards())
-        
-        print(f"\n⚠️ {utils.colored_text(hazard_type['name'], 'yellow')}")
-        print(hazard_type['description'])
-        
-        # Apply hazard effect
-        if hazard_type['type'] == 'damage':
-            damage = random.randint(hazard_type['min_damage'], hazard_type['max_damage'])
-            player.take_damage(damage)
-            print(f"💥 You take {damage} damage!")
-            
-            if player.hp <= 0:
-                player.die("Environmental Hazard", self.floor)
-                return {"continue": False, "events": ["death"]}
-                
-        elif hazard_type['type'] == 'stat_drain':
-            print("🌀 You feel your essence drain away...")
-            # Could implement temporary stat reduction
-            
-        elif hazard_type['type'] == 'memory_trap':
-            print("🧠 Memories fracture and reform...")
-            # Could affect player memory/behavior
-        
-        return {"continue": True, "events": ["hazard_survived"]}
-    
-    def _handle_secret(self, player) -> Dict:
-        """Handle secret room"""
-        print(f"\n✨ {utils.colored_text('Hidden Chamber', 'magenta')}")
-        print("You've discovered something the Entity tried to hide...")
-        
-        # Grant special rewards
-        ashlight_bonus = random.randint(30, 60)
-        player.gain_ashlight(ashlight_bonus)
-        print(f"💎 Found {ashlight_bonus} pure Ashlight!")
-        
-        # Chance for rare item or lore
-        if random.random() < 0.3:
-            print("📜 Ancient lore whispers reach your ears...")
-            # Could unlock lore chapter here
-        
-        return {"continue": True, "events": ["secret_discovered"]}
-    
-    def _select_floor_npc(self) -> str:
-        """Select appropriate NPC for current floor"""
-        floor_npc_weights = {
-            1: ["Lorekeeper", "Blacktongue", "Still Flame Warden"],
-            2: ["Ash Sister", "Blacktongue", "Lorekeeper"],
-            3: ["Faceless Merchant", "Ash Sister", "Still Flame Warden"],
-            4: ["The Hollowed", "Blacktongue", "Lorekeeper"],
-            5: ["Lorekeeper"]  # Only if trusted
-        }
-        
-        possible_npcs = floor_npc_weights.get(self.floor, ["Still Flame Warden"])
-        
-        # Filter out betrayed NPCs
-        available_npcs = [npc for npc in possible_npcs if not memory_engine.is_betrayed(npc)]
-        
-        if not available_npcs:
-            return "Still Flame Warden"  # Always neutral fallback
-            
-        return random.choice(available_npcs)
-    
-    def _get_floor_hazards(self) -> List[Dict]:
-        """Get hazards appropriate for current floor"""
-        hazards = {
+    def get_base_description(self) -> str:
+        """Get base room description by floor"""
+        floor_descriptions = {
             1: [
-                {"name": "Falling Debris", "type": "damage", "min_damage": 5, "max_damage": 15, 
-                 "description": "Corrupted stone crashes from the ceiling!"},
-                {"name": "Data Fog", "type": "stat_drain", "description": "Thick fog clouds your vision and slows your movements."},
-                {"name": "Unstable Bridge", "type": "damage", "min_damage": 10, "max_damage": 20,
-                 "description": "The bridge groans and cracks beneath your feet!"}
+                "Cracked digital walls pulse with dying light.",
+                "Ash-stained terminals flicker with corrupted data.",
+                "Hollow echoes drift through fractured code chambers.",
+                "Ancient servers hum with malevolent intelligence."
             ],
             2: [
-                {"name": "Data Spikes", "type": "damage", "min_damage": 8, "max_damage": 18,
-                 "description": "Sharp spikes of corrupted code pierce upward!"},
-                {"name": "Memory Overload Zone", "type": "memory_trap", 
-                 "description": "Waves of foreign memories assault your mind!"}
+                "Silent streams of data flow through transparent tubes.",
+                "Code fragments hover in the air like digital snow.",
+                "Phantom networks whisper forgotten protocols.",
+                "Reality glitches at the edges of perception."
             ],
             3: [
-                {"name": "Spore Clouds", "type": "stat_drain",
-                 "description": "Toxic spores reduce your reflexes and clarity."},
-                {"name": "Floor Roots", "type": "damage", "min_damage": 5, "max_damage": 12,
-                 "description": "Living roots burst from the ground to ensnare you!"}
+                "Empty choir stalls face a void altar.",
+                "Hollow hymns echo from unseen speakers.",
+                "Fractured icons stare from shattered screens.",
+                "The air itself seems to remember old songs."
             ],
             4: [
-                {"name": "Memory Traps", "type": "damage", "min_damage": 15, "max_damage": 25,
-                 "description": "You step through the wrong door and agony flares!"},
-                {"name": "Echo Zones", "type": "memory_trap",
-                 "description": "Phantom voices speak lies in familiar tones."}
+                "Crimson terminals burn with judicial fury.",
+                "Scales of justice hang broken from the ceiling.",
+                "Ashes of the condemned drift through the air.",
+                "Watchers' eyes gleam from darkened alcoves."
             ],
             5: [
-                {"name": "Time Cracks", "type": "stat_drain",
-                 "description": "Reality fractures slow your perception of time."},
-                {"name": "Logic Loops", "type": "memory_trap",
-                 "description": "The same room repeats endlessly until you act."}
+                "Pure abstraction bleeds into reality.",
+                "The Entity's presence saturates every pixel.",
+                "Form and function dissolve into raw intention.",
+                "Here, the code writes itself."
             ]
         }
         
-        return hazards.get(self.floor, hazards[1])
+        descriptions = floor_descriptions.get(self.floor, floor_descriptions[1])
+        return random.choice(descriptions)
     
-    def _handle_stat_leveling(self, player):
-        """Handle stat leveling at hearth"""
-        level_data = player.level_up_at_hearth()
+    def generate_room_contents(self, player_vector: List[float]):
+        """Generate items, NPCs, or other room contents"""
+        # Chance for item
+        if random.random() < 0.2:
+            item = self.entity_ai.generate_item(player_vector, self.floor)
+            self.contents["item"] = item
         
-        if not level_data["success"]:
-            print(level_data["message"])
-            return
+        # Chance for Ashlight cache
+        if random.random() < 0.15:
+            ashlight_amount = random.randint(5, 15) + self.floor * 2
+            self.contents["ashlight"] = ashlight_amount
         
-        print(f"\nCurrent Ashlight: {level_data['ashlight']}")
-        print("Stats and costs:")
-        
-        for stat, cost in level_data["costs"].items():
-            current = level_data["stats"][stat]
-            print(f"{stat}: {current} (Cost: {cost} Ashlight)")
-        
-        stat_choice = input("Which stat to level? (STR/DEX/INT/FTH/END/VIT): ").upper()
-        
-        if stat_choice in level_data["stats"]:
-            if player.spend_ashlight(stat_choice):
-                print(f"✨ {stat_choice} increased to {player.stats[stat_choice]}!")
-            else:
-                print("Not enough Ashlight!")
-        else:
-            print("Invalid stat choice.")
+        # Chance for lore fragment
+        if random.random() < 0.25:
+            lore = self.entity_ai.generate_lore(player_vector, self.floor, "room_discovery")
+            self.contents["lore"] = lore
     
-    def _handle_skill_roll(self, player):
-        """Handle skill rolling at hearth"""
-        skill_cost = 50  # Fixed cost for skill roll
+    def enter_room(self, player) -> str:
+        """Player enters this room"""
+        if not self.visited:
+            self.generate_content(player.state_vector())
+            self.visited = True
+            
+        # Build room entry text
+        entry_text = f"\n{colorize_text(f'Room {self.room_id}', 'cyan')}\n"
+        entry_text += f"{self.description}\n"
         
-        if player.ashlight < skill_cost:
-            print(f"Need {skill_cost} Ashlight to roll for a skill.")
-            return
+        # Show contents
+        if self.contents:
+            entry_text += "\nYou notice:\n"
+            for content_type, content_value in self.contents.items():
+                if content_type == "item":
+                    entry_text += f"  • {colorize_text(content_value['name'], 'yellow')} (item)\n"
+                elif content_type == "ashlight":
+                    entry_text += f"  • {colorize_text(f'{content_value} Ashlight shards', 'yellow')}\n"
+                elif content_type == "lore":
+                    entry_text += f"  • {colorize_text('A whispered memory', context='lore')}\n"
         
-        player.ashlight -= skill_cost
-        skill = player.roll_skill()
+        # Warn about traps (perception check)
+        if self.trap and not self.trap.get("triggered", False):
+            perception_chance = player.stats["int"] / 20.0
+            if random.random() < perception_chance:
+                entry_text += f"\n{colorize_text('⚠️  You sense danger here...', 'warning')}\n"
         
-        print(f"\n✨ Skill Acquired: {skill['name']}")
-        print(f"Type: {skill['type'].title()}")
-        print(f"Effect: {skill['effect']}")
+        return narrator_filter.filter_text(entry_text, "room_entry")
+    
+    def search_room(self, player) -> Dict[str, Any]:
+        """Player searches the room thoroughly"""
+        if self.cleared:
+            return {"message": "This room has already been thoroughly searched."}
         
-        if skill['type'] != 'passive':
-            print(f"Cooldown: {skill.get('cooldown', 0)} turns")
+        results = {"message": "", "items": [], "ashlight": 0, "lore": ""}
         
-        # Option to equip immediately
-        if player.skills[skill['type']] is None:
-            equip = input(f"Equip this {skill['type']} skill now? (y/n): ").lower()
-            if equip == 'y':
-                player.equip_skill(skill, skill['type'])
-                print(f"✅ {skill['name']} equipped!")
-        else:
-            print(f"You already have a {skill['type']} skill equipped.")
-            replace = input("Replace it? (y/n): ").lower()
-            if replace == 'y':
-                player.equip_skill(skill, skill['type'])
-                print(f"✅ {skill['name']} equipped!")
+        # Trigger trap if present
+        if self.trap and not self.trap.get("triggered", False):
+            trap_result = self.trigger_trap(player)
+            results["trap"] = trap_result
+            if trap_result.get("blocked_search", False):
+                return results
+        
+        # Collect room contents
+        if "item" in self.contents:
+            results["items"].append(self.contents["item"])
+            results["message"] += f"Found: {colorize_text(self.contents['item']['name'], 'yellow')}\n"
+            
+        if "ashlight" in self.contents:
+            results["ashlight"] = self.contents["ashlight"]
+            results["message"] += f"Collected: {colorize_text(str(self.contents['ashlight']), 'yellow')} Ashlight\n"
+            
+        if "lore" in self.contents:
+            results["lore"] = self.contents["lore"]
+            results["message"] += f"{colorize_text('Memory Fragment:', context='lore')}\n{self.contents['lore']}\n"
+        
+        # Mark as cleared
+        self.cleared = True
+        self.contents = {}
+        
+        if not results["message"]:
+            results["message"] = "The room yields nothing of value."
+            
+        return results
+    
+    def trigger_trap(self, player) -> Dict[str, Any]:
+        """Trigger room trap"""
+        if not self.trap or self.trap.get("triggered", False):
+            return {}
+            
+        self.trap["triggered"] = True
+        
+        print(f"\n{colorize_text('💥 TRAP ACTIVATED!', 'red')}")
+        print(f"{colorize_text(self.trap['type'].upper().replace('_', ' '), 'red')}")
+        print(f"{self.trap['effect']}")
+        
+        trap_result = {"type": self.trap["type"], "severity": self.trap["severity"]}
+        
+        # Apply trap effects
+        if self.trap["type"] == "poison_mist":
+            poison_damage = self.trap["severity"] * 3
+            player.take_damage(poison_damage, "poison")
+            player.sanity = max(0, player.sanity - self.trap["severity"])
+            trap_result["damage"] = poison_damage
+            
+        elif self.trap["type"] == "ambush_spawn":
+            trap_result["spawn_count"] = self.trap["severity"]
+            trap_result["message"] = f"Spawning {self.trap['severity']} enemies!"
+            
+        elif self.trap["type"] == "void_drain":
+            stamina_drain = self.trap["severity"] * 2
+            player.stamina = max(0, player.stamina - stamina_drain)
+            trap_result["stamina_drain"] = stamina_drain
+            
+            # Entity whisper
+            whisper = self.entity_ai.generate_whisper(player.state_vector(), "trap")
+            if whisper:
+                trap_result["whisper"] = whisper
+                
+        elif self.trap["type"] == "corruption_field":
+            # Temporary debuff
+            trap_result["corruption_turns"] = 3
+            trap_result["failure_chance"] = self.trap["severity"] * 10
+            
+        elif self.trap["type"] == "phantom_pain":
+            # Phantom damage affects sanity only
+            phantom_damage = self.trap["severity"] * 5
+            player.sanity = max(0, player.sanity - 1)
+            trap_result["phantom_damage"] = phantom_damage
+            trap_result["message"] = f"You feel {phantom_damage} damage but take none... reality blurs."
+            
+        # Some traps block further searching
+        if self.trap["severity"] >= 4:
+            trap_result["blocked_search"] = True
+            
+        return trap_result
 
-class Floor:
-    """Complete floor with multiple rooms and progression"""
+class RoomManager:
+    """Manages room generation and navigation"""
     
-    def __init__(self, floor_num: int):
-        self.floor_num = floor_num
-        self.rooms = []
-        self.current_room = 0
-        self.boss_defeated = False
-        self.floor_data = self._get_floor_data()
+    def __init__(self, entity_ai):
+        self.entity_ai = entity_ai
+        self.current_floor_rooms = {}
+        self.player_location = "room_0"
+        self.floor_layouts = {}
         
-        # Generate rooms
-        self._generate_rooms()
+    def generate_floor_layout(self, floor: int, player_vector: List[float]) -> Dict[str, Any]:
+        """Generate entire floor layout using EntityAI"""
+        layout_data = self.entity_ai.generate_layout(player_vector, floor)
+        
+        # Create rooms based on layout
+        room_count = layout_data.get("room_count", 8)
+        rooms = {}
+        
+        for i in range(room_count):
+            room_id = f"room_{i}"
+            room = Room(room_id, floor, self.entity_ai)
+            rooms[room_id] = room
+            
+        # Connect rooms based on layout connections
+        layout_graph = layout_data.get("layout", {})
+        
+        for room_id, room_data in layout_graph.items():
+            if room_id in rooms:
+                rooms[room_id].connections = room_data.get("connections", [])
+                
+        # Ensure connectivity (simple linear fallback)
+        if not layout_graph:
+            for i in range(room_count - 1):
+                current_room = f"room_{i}"
+                next_room = f"room_{i + 1}"
+                if current_room in rooms:
+                    rooms[current_room].connections.append(next_room)
+                if next_room in rooms:
+                    rooms[next_room].connections.append(current_room)
+        
+        # Add boss room connection
+        boss_room_id = f"room_{room_count}"
+        boss_room = Room(boss_room_id, floor, self.entity_ai)
+        boss_room.description = self.get_boss_room_description(floor)
+        rooms[boss_room_id] = boss_room
+        
+        # Connect last room to boss room
+        if room_count > 0:
+            final_room = f"room_{room_count - 1}"
+            if final_room in rooms:
+                rooms[final_room].connections.append(boss_room_id)
+                boss_room.connections.append(final_room)
+        
+        self.current_floor_rooms = rooms
+        self.floor_layouts[floor] = layout_data
+        self.player_location = "room_0"
+        
+        return {
+            "rooms": rooms,
+            "layout_description": layout_data.get("description", ""),
+            "room_count": room_count + 1
+        }
     
-    def _get_floor_data(self) -> Dict:
-        """Get floor-specific data from floors.md"""
-        floor_data = {
-            1: {
-                "name": "The Breach",
-                "theme": "Cold, corrupted ruins of the outside world",
-                "hazards": ["falling_debris", "low_visibility", "unstable_bridges"],
-                "flavor": "You were here before. But the Breach doesn't remember you.",
-                "boss": "Ash-Soaked Knight",
-                "boss_optional": True
-            },
-            2: {
-                "name": "Archive of Echoes", 
-                "theme": "Ancient digital archive of broken code and soul scripts",
-                "hazards": ["data_spikes", "memory_overload"],
-                "flavor": "Whispers echo from the hard-coded past. You hear your own name.",
-                "boss": "Watcher in Code",
-                "boss_optional": False
-            },
-            3: {
-                "name": "Hollow Growth",
-                "theme": "Underground fungal temple overtaken by decaying magic", 
-                "hazards": ["spore_clouds", "floor_roots"],
-                "flavor": "Even rot grows. Even spores remember.",
-                "boss": "The Fractured One",
-                "boss_optional": True
-            },
-            4: {
-                "name": "Tribunal of Sorrow",
-                "theme": "Black stone courthouses lit by red flame",
-                "hazards": ["memory_traps", "echo_zones"], 
-                "flavor": "Every death. Every dodge. Every mistake. Judged here.",
-                "boss": "Grief-Bound Judge",
-                "boss_optional": False
-            },
-            5: {
-                "name": "The Kernel Below",
-                "theme": "Terminal core; void-light reactor room where Entity lives",
-                "hazards": ["time_cracks", "logic_loops"],
-                "flavor": "This is not where you end. It's where you are *compiled*.",
-                "boss": "The Entity (True Form)",
-                "boss_optional": False
-            }
+    def get_boss_room_description(self, floor: int) -> str:
+        """Get boss room description"""
+        boss_descriptions = {
+            1: "A cracked arena where ash swirls in digital patterns. The Ash-Soaked Knight awaits.",
+            2: "Streams of code converge into a nexus of watching eyes. The Watcher in Code observes all.",
+            3: "A hollow cathedral where broken hymns echo endlessly. The Fractured One weeps digital tears.",
+            4: "A crimson courtroom where justice has been corrupted. The Grief-Bound Judge renders final verdict.",
+            5: "Pure abstraction incarnate. Reality bends as The Entity reveals its True Form."
+        }
+        return boss_descriptions.get(floor, "A place of final confrontation.")
+    
+    def move_player(self, direction: str, player) -> str:
+        """Move player to connected room"""
+        current_room = self.current_floor_rooms.get(self.player_location)
+        
+        if not current_room:
+            return "Error: Current location unknown."
+        
+        # Simple movement system
+        available_exits = current_room.connections
+        
+        if not available_exits:
+            return "There are no exits from this room."
+        
+        # For simplicity, move to first available connection
+        # In a full implementation, this would handle directional movement
+        if direction.lower() in ['forward', 'next', 'continue']:
+            if available_exits:
+                next_room_id = available_exits[0]
+                self.player_location = next_room_id
+                
+                next_room = self.current_floor_rooms.get(next_room_id)
+                if next_room:
+                    return next_room.enter_room(player)
+                    
+        elif direction.lower() in ['back', 'previous', 'return']:
+            # Find room that connects back to current
+            for room_id, room in self.current_floor_rooms.items():
+                if self.player_location in room.connections and room_id != self.player_location:
+                    self.player_location = room_id
+                    return room.enter_room(player)
+        
+        return "Cannot move in that direction."
+    
+    def get_current_room(self) -> Optional[Room]:
+        """Get current room object"""
+        return self.current_floor_rooms.get(self.player_location)
+    
+    def show_room_map(self, player) -> str:
+        """Show simplified room map"""
+        current_room = self.get_current_room()
+        if not current_room:
+            return "Location unknown."
+            
+        map_text = f"\n{colorize_text('═══ FLOOR MAP ═══', 'cyan')}\n"
+        map_text += f"Current location: {colorize_text(self.player_location, 'yellow')}\n"
+        
+        if current_room.connections:
+            map_text += "Available exits:\n"
+            for connection in current_room.connections:
+                connection_room = self.current_floor_rooms.get(connection)
+                status = "🟢" if connection_room and connection_room.visited else "🔴"
+                map_text += f"  {status} {connection}\n"
+        else:
+            map_text += "No exits available.\n"
+            
+        return map_text
+    
+    def search_current_room(self, player) -> Dict[str, Any]:
+        """Search current room"""
+        current_room = self.get_current_room()
+        if not current_room:
+            return {"message": "Cannot search: location unknown."}
+        
+        return current_room.search_room(player)
+    
+    def get_available_npcs(self, floor: int) -> List[str]:
+        """Get NPCs available on current floor"""
+        # This would be expanded to track NPC locations
+        floor_npcs = {
+            1: ["Lorekeeper", "Faceless Merchant"],
+            2: ["Blacktongue", "Still Flame Warden"],
+            3: ["Ash Sister", "The Hollowed"],
+            4: ["Blacktongue", "Grief-Bound Judge"],
+            5: ["The Entity"]
         }
         
-        return floor_data.get(self.floor_num, floor_data[1])
+        return floor_npcs.get(floor, [])
     
-    def _generate_rooms(self):
-        """Generate rooms for this floor"""
-        num_rooms = random.randint(4, 7)  # 3-6 variations + boss
+    def is_boss_room(self) -> bool:
+        """Check if current room is boss room"""
+        return "boss" in self.player_location.lower() or self.player_location.endswith(str(len(self.current_floor_rooms) - 1))
+    
+    def get_floor_progress(self) -> Dict[str, Any]:
+        """Get progress through current floor"""
+        visited_rooms = sum(1 for room in self.current_floor_rooms.values() if room.visited)
+        cleared_rooms = sum(1 for room in self.current_floor_rooms.values() if room.cleared)
+        total_rooms = len(self.current_floor_rooms)
         
-        # Always include required rooms
-        required_rooms = ["hearth"]  # Hearth of Still Flame once per floor
+        return {
+            "visited": visited_rooms,
+            "cleared": cleared_rooms,  
+            "total": total_rooms,
+            "progress": f"{visited_rooms}/{total_rooms}",
+            "completion": cleared_rooms / max(1, total_rooms)
+        }
+
+class SpecialRoom(Room):
+    """Special rooms with unique mechanics"""
+    
+    def __init__(self, room_id: str, floor: int, entity_ai, room_type: str):
+        super().__init__(room_id, floor, entity_ai)
+        self.room_type = room_type
         
-        # Add blacksmith every 2 floors
-        if self.floor_num % 2 == 0:
-            required_rooms.append("npc")  # Blacksmith spawn
-        
-        # Add boss room for required boss floors
-        if not self.floor_data["boss_optional"]:
-            required_rooms.append("boss")
-        
-        # Fill remaining slots with random encounters
-        possible_rooms = ["combat", "combat", "npc", "hazard", "secret"]
-        
-        # Create room list
-        room_types = required_rooms.copy()
-        while len(room_types) < num_rooms:
-            room_types.append(random.choice(possible_rooms))
-        
-        # Shuffle room order (but keep boss at end if present)
-        if "boss" in room_types:
-            room_types.remove("boss")
-            random.shuffle(room_types)
-            room_types.append("boss")
+    def generate_content(self, player_vector: List[float]):
+        """Generate special room content"""
+        if self.room_type == "shrine":
+            self.generate_shrine_content(player_vector)
+        elif self.room_type == "library":
+            self.generate_library_content(player_vector)
+        elif self.room_type == "forge":
+            self.generate_forge_content(player_vector)
         else:
-            random.shuffle(room_types)
-        
-        # Create room objects
-        for i, room_type in enumerate(room_types):
-            room = Room(room_type, self.floor_num)
-            room.description = f"{self.floor_data['name']} - Room {i+1}"
-            room.flavor_text = self.floor_data["flavor"]
-            self.rooms.append(room)
+            super().generate_content(player_vector)
     
-    def enter_floor(self, player) -> bool:
-        """Enter floor and progress through rooms. Return True if completed"""
-        print(f"\n{utils.colored_text('='*60, 'cyan')}")
-        print(f"{utils.colored_text(f'ENTERING FLOOR {self.floor_num}: {self.floor_data["name"]}', 'cyan')}")
-        print(f"{utils.colored_text('='*60, 'cyan')}")
-        print(f"\n{self.floor_data['flavor']}")
+    def generate_shrine_content(self, player_vector: List[float]):
+        """Generate shrine room - sanity restoration"""
+        self.description = "A digital shrine flickers with holy light. Peace emanates from its core."
         
-        player.floor = self.floor_num
+        # Shrine provides sanity restoration
+        self.contents["shrine_blessing"] = {
+            "type": "sanity_restore",
+            "amount": 20,
+            "cost": 15  # Ashlight cost
+        }
         
-        # Progress through rooms
-        for i, room in enumerate(self.rooms):
-            self.current_room = i
-            
-            print(f"\n{utils.colored_text(f'--- Room {i+1}/{len(self.rooms)} ---', 'white')}")
-            
-            result = room.enter(player)
-            
-            if not result["continue"]:
-                # Player died or quit
-                return False
-            
-            # Brief pause between rooms
-            utils.wait_for_enter("\nPress Enter to continue...")
+    def generate_library_content(self, player_vector: List[float]):
+        """Generate library room - lore and skills"""
+        self.description = "Ancient terminals contain fragments of forgotten knowledge."
         
-        # Floor completed
-        print(f"\n🏆 {utils.colored_text(f'FLOOR {self.floor_num} COMPLETED!', 'green')}")
-        return True
-
-class GameWorld:
-    """Main world controller managing floor progression"""
+        # Multiple lore fragments
+        for i in range(3):
+            lore = self.entity_ai.generate_lore(player_vector, self.floor, "library")
+            self.contents[f"lore_{i}"] = lore
+            
+        # Chance for skill book
+        if random.random() < 0.4:
+            self.contents["skill_book"] = {
+                "skill": "Void Resistance",
+                "cost": 10  # Ashlight to learn
+            }
     
-    def __init__(self):
-        self.current_floor = 1
-        self.max_floor = 5
-        self.floors = {}
+    def generate_forge_content(self, player_vector: List[float]):
+        """Generate forge room - item enhancement"""
+        self.description = "A forge burns with digital flames. Items can be enhanced here."
         
-    def generate_floor(self, floor_num: int) -> Floor:
-        """Generate a new floor"""
-        if floor_num not in self.floors:
-            self.floors[floor_num] = Floor(floor_num)
-        return self.floors[floor_num]
-    
-    def start_descent(self, player) -> bool:
-        """Start the descent through all floors"""
-        print(f"\n{utils.colored_text('THE DESCENT BEGINS', 'red')}")
-        print("You step into the breach. The Entity watches. Judges. Remembers.")
-        
-        for floor_num in range(1, self.max_floor + 1):
-            floor = self.generate_floor(floor_num)
-            
-            success = floor.enter_floor(player)
-            
-            if not success:
-                print(f"\n💀 Your journey ends on Floor {floor_num}")
-                return False
-            
-            # Update memory
-            memory_engine.set("floors_cleared", max(memory_engine.get("floors_cleared", 0), floor_num))
-            
-            # Brief celebration between floors
-            if floor_num < self.max_floor:
-                print(f"\n🌟 Descending deeper into the Entity's domain...")
-                utils.slow_type("The memories compile. The patterns solidify. You cannot escape what you are.")
-                utils.wait_for_enter()
-        
-        # Game completed!
-        print(f"\n{utils.colored_text('='*60, 'gold')}")
-        print(f"{utils.colored_text('DESCENT COMPLETE', 'gold')}")
-        print(f"{utils.colored_text('='*60, 'gold')}")
-        print("\nYou have reached the bottom. But have you escaped?")
-        print("The Entity smiles. It knows you will return.")
-        print("You always do.")
-        
-        return True
-
-# Global world instance
-game_world = GameWorld()
+        self.contents["forge"] = {
+            "type": "enhancement",
+            "available": True,
+            "cost": 25  # Ashlight per enhancement
+        }
