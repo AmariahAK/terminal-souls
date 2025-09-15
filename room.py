@@ -232,7 +232,9 @@ class RoomManager:
         
         for room_id, room_data in layout_graph.items():
             if room_id in rooms:
-                rooms[room_id].connections = room_data.get("connections", [])
+                # Ensure connections are strings
+                connections = room_data.get("connections", [])
+                rooms[room_id].connections = [f"room_{conn}" if isinstance(conn, int) else str(conn) for conn in connections]
                 
         # Ensure connectivity (simple linear fallback)
         if not layout_graph:

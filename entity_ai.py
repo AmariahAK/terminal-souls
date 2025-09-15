@@ -36,11 +36,17 @@ class EntityAI:
         self.trap_gen = GeneratorMLP(20, 2)  # [type_bias, severity]
         self.ui_gen = GeneratorMLP(20, 3)  # [delay_ms, shuffle_chance, phantom_chance]
         
-        # Pre-warm with dummy inputs for "anticipatory" feel
-        dummy_input = torch.zeros(1, 20)
+        # Set all models to evaluation mode (no training)
         for model in [self.mob_gen, self.item_gen, self.boss_gen, self.lore_gen, 
                      self.shop_gen, self.layout_gen, self.trap_gen, self.ui_gen]:
-            _ = model(dummy_input)
+            model.eval()
+        
+        # Pre-warm with dummy inputs for "anticipatory" feel
+        with torch.no_grad():  # Disable gradients for efficiency
+            dummy_input = torch.zeros(1, 20)
+            for model in [self.mob_gen, self.item_gen, self.boss_gen, self.lore_gen, 
+                         self.shop_gen, self.layout_gen, self.trap_gen, self.ui_gen]:
+                _ = model(dummy_input)
         
         # Game bible for mutable lore
         self.bible_path = "/Users/amariah/Documents/GitHub/terminal-souls/game_bible.json"
@@ -100,8 +106,9 @@ class EntityAI:
     
     def generate_mob(self, player_vector: List[float], floor: int) -> Dict[str, Any]:
         """Generate adaptive mob that counters player"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.mob_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.mob_gen(vec_tensor)[0]
         
         # Apply glitch noise for low sanity
         outputs = self.apply_glitch_noise(outputs, player_vector[10])
@@ -139,8 +146,9 @@ class EntityAI:
     
     def generate_item(self, player_vector: List[float], floor: int) -> Dict[str, Any]:
         """Generate tempting items that exploit player weaknesses"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.item_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.item_gen(vec_tensor)[0]
         
         # Tempt weaknesses
         vit_weakness = 1.0 - player_vector[5]  # Low VIT? Healing items with risks
@@ -166,8 +174,9 @@ class EntityAI:
     
     def generate_boss(self, player_vector: List[float], floor: int) -> Dict[str, Any]:
         """Generate adaptive boss with countering patterns"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.boss_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.boss_gen(vec_tensor)[0]
         
         entity_bias = self.calculate_entity_bias(player_vector)
         
@@ -204,8 +213,9 @@ class EntityAI:
     
     def generate_lore(self, player_vector: List[float], floor: int, context: str = "") -> str:
         """Generate adaptive lore with gaslighting potential"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        tone_bias = float(self.lore_gen(vec_tensor)[0][0])
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            tone_bias = float(self.lore_gen(vec_tensor)[0][0].detach())
         
         entity_bias = self.calculate_entity_bias(player_vector)
         
@@ -267,8 +277,9 @@ class EntityAI:
     
     def generate_shop(self, player_vector: List[float], floor: int, currency: int) -> Dict[str, Any]:
         """Generate shops that exploit player desperation"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.shop_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.shop_gen(vec_tensor)[0]
         
         entity_bias = self.calculate_entity_bias(player_vector)
         
@@ -303,8 +314,9 @@ class EntityAI:
     
     def generate_layout(self, player_vector: List[float], floor: int) -> Dict[str, Any]:
         """Generate adaptive dungeon layouts that counter player behavior"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.layout_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.layout_gen(vec_tensor)[0]
         
         flee_count = player_vector[13] if len(player_vector) > 13 else 0
         entity_bias = self.calculate_entity_bias(player_vector)
@@ -346,8 +358,9 @@ class EntityAI:
     
     def generate_trap(self, player_vector: List[float], floor: int) -> Dict[str, Any]:
         """Generate traps that exploit player habits"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.trap_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.trap_gen(vec_tensor)[0]
         
         # Track habits from player vector extensions
         heal_spam = player_vector[14] if len(player_vector) > 14 else 0
@@ -382,8 +395,9 @@ class EntityAI:
     
     def generate_ui_distort(self, player_vector: List[float]) -> Dict[str, Any]:
         """Generate UI corruption for high predictability or low sanity"""
-        vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
-        outputs = self.ui_gen(vec_tensor)[0]
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.ui_gen(vec_tensor)[0]
         
         predictability = player_vector[9]
         sanity = player_vector[10]

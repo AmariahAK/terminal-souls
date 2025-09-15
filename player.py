@@ -203,8 +203,32 @@ class Player:
         self.update_predictability("kill")
     
     def die(self):
-        """Handle player death"""
+        """Handle player death with proper feedback"""
+        from utils import colorize_text, create_ascii_border, press_enter_to_continue, music_manager
+        
+        # Death counter
         self.deaths += 1
+        
+        # Play death sound effect
+        music_manager.play_sound_effect("death")
+        
+        # Show dramatic death message
+        death_message = f"""
+{create_ascii_border("DEATH", "═")}
+
+{colorize_text("You have been compiled.", 'red')}
+{colorize_text("Your essence fades into digital shadow.", 'red')}
+
+Death Count: {colorize_text(str(self.deaths), 'red')}
+Ashlight Lost: {colorize_text(str(self.ashlight - max(10, self.ashlight // 2)), 'yellow')}
+Floor Progress: {colorize_text("RESET TO FLOOR 1", 'red')}
+
+{colorize_text("The Entity grows stronger from your failure.", context='whisper')}
+{colorize_text("Your patterns are now part of its memory.", context='whisper')}
+"""
+        print(death_message)
+        
+        # Reset stats
         self.health = self.max_health
         self.stamina = self.max_stamina
         self.floor = 1
@@ -219,6 +243,8 @@ class Player:
         # Apply Hollow class penalty
         if self.player_class == "Hollow" and self.deaths >= 5:
             self.apply_class_bonuses()
+            
+        press_enter_to_continue("Press Enter to respawn in the Entity's embrace...")
     
     def interact_with_npc(self, npc_name: str, interaction_type: str):
         """Update NPC relationships based on interactions"""

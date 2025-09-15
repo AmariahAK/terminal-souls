@@ -115,10 +115,21 @@ class Game:
         
     def start_music(self):
         """Initialize background music"""
+        print(f"\n{colorize_text('♪ Initializing ambient soundscape...', 'cyan')}")
         music_manager.play_background()
+        if music_manager.is_playing:
+            print(f"{colorize_text('♪ The Entity\'s hymn begins...', 'cyan')}")
+        print()
         
     def main_game_loop(self):
         """Main game loop with EntityAI orchestration"""
+        
+        # Initialize first floor
+        if not self.room_manager.current_floor_rooms:
+            layout = self.room_manager.generate_floor_layout(self.player.floor, self.player.state_vector())
+            print(f"\n{colorize_text('The Entity shapes your first descent...', 'cyan')}")
+            print(f"{layout.get('layout_description', 'Paths twist in digital shadow.')}")
+            press_enter_to_continue()
         
         while self.game_active and self.player.health > 0:
             # Update EntityAI with current player state
@@ -132,9 +143,10 @@ class Game:
             
             # Update narrator tone
             import torch
-            tone_bias = float(self.entity_ai.lore_gen(
-                torch.tensor([player_vector], dtype=torch.float32)
-        )[0][0])
+            # Get tone bias from lore generation system
+            lore_sample = self.entity_ai.generate_lore(player_vector, self.player.floor, "tone_sample")
+            # Use simple bias calculation instead of direct neural network access
+            tone_bias = self.entity_ai.calculate_entity_bias(player_vector)
             narrator_filter.update_tone(tone_bias, self.player.get_status_summary())
             
             # Music distortion for low sanity
@@ -197,33 +209,66 @@ class Game:
         
         return floor_descs.get(self.player.floor, "Unknown depths...")
         
+    def is_safe_zone(self) -> bool:
+        """Check if player is in a safe zone (no combat, no immediate danger)"""
+        return not self.in_combat and not getattr(self, 'in_dangerous_area', False)
+        
     def get_player_action(self) -> Optional[str]:
-        """Get player action with UI distortion"""
-        choices = ["a - Attack/Explore", "d - Dodge/Move", "h - Heal", "f - Flee",
-                  "i - Inventory", "s - Stats", "t - Talk"]
+        """Get player action with context-sensitive UI"""
+        safe_zone = self.is_safe_zone()
         
-        # Apply choice shuffling
-        choices = ui_distorter.shuffle_choices(choices)
-        
-        print(f"\n{colorize_text('What do you do?', 'white')}")
-        for choice in choices:
-            print(f"  {choice}")
+        if safe_zone:
+            # Safe zone - no timer, different buttons
+            choices = [
+                "e - Explore area", 
+                "m - Move to new room", 
+                "h - Heal", 
+                "i - Inventory", 
+                "s - Stats & Upgrades", 
+                "t - Talk to NPCs"
+            ]
             
-        music_manager.pause()
-        
-        # Get timed input (varies based on boss aggression)
-        time_limit = self.calculate_time_limit()
-        raw_input = input_manager.get_timed_input("", [], time_limit)
-        
-        music_manager.unpause()
-        
-        if raw_input is None:
-            return None
+            print(f"\n{colorize_text('📍 Safe Zone - What do you do?', 'green')}")
+            for choice in choices:
+                print(f"  {choice}")
+                
+            # No time limit in safe zones
+            raw_input = input(f"\n{colorize_text('Choose action:', 'white')} ").strip().lower()
             
-        # Apply phantom input
-        processed_input = ui_distorter.apply_phantom_input(raw_input)
-        
-        return processed_input
+            # Map safe zone inputs to game actions
+            input_map = {
+                'e': 'a',  # Explore maps to attack/explore
+                'm': 'd',  # Move maps to dodge/move
+                'h': 'h',  # Heal
+                'i': 'i',  # Inventory
+                's': 's',  # Stats
+                't': 't'   # Talk
+            }
+            
+            return input_map.get(raw_input, raw_input)
+            
+        else:
+            # Combat/danger zone - timed input
+            choices = ["a - Attack", "d - Dodge", "h - Emergency Heal", "f - Flee"]
+            
+            # Apply choice shuffling for danger
+            choices = ui_distorter.shuffle_choices(choices)
+            
+            print(f"\n{colorize_text('⚔️ DANGER - Quick decision needed!', 'red')}")
+            for choice in choices:
+                print(f"  {choice}")
+                
+            # Get timed input (varies based on boss aggression)
+            time_limit = self.calculate_time_limit()
+            raw_input = input_manager.get_timed_input("", [], time_limit)
+            
+            if raw_input is None:
+                return None
+                
+            # Apply phantom input for dangerous situations
+            processed_input = ui_distorter.apply_phantom_input(raw_input)
+            
+            return processed_input
         
     def calculate_time_limit(self) -> int:
         """Calculate dynamic time limit based on game state"""
@@ -248,9 +293,10 @@ class Game:
         # Update player predictability
         self.player.update_predictability(action)
         
-        if action == 'a':  # Attack/Explore
+        if action == 'a':  # Attack/Explore  
             if self.in_combat:
                 self.combat.player_attack(self.player)
+                self.in_dangerous_area = True  # Mark as dangerous after combat
             else:
                 self.explore_current_area()
                 
@@ -258,7 +304,8 @@ class Game:
             if self.in_combat:
                 self.combat.player_dodge(self.player)
             else:
-                self.move_to_new_area()
+                self.move_to_new_room()
+                self.in_dangerous_area = False  # Moving to new room is safe
                 
         elif action == 'h':  # Heal
             self.use_healing_item()
@@ -275,6 +322,12 @@ class Game:
         elif action == 't':  # Talk
             self.attempt_npc_interaction()
             
+        elif action == 'test' and self.player.health == self.player.max_health:
+            # Hidden test command to take damage for testing healing
+            test_damage = 30
+            self.player.take_damage(test_damage)
+            print(f"{colorize_text(f'[TEST] Took {test_damage} damage for healing testing', 'yellow')}")
+            
         else:
             print(f"{colorize_text('Invalid action.', 'red')}")
             
@@ -282,30 +335,61 @@ class Game:
         """Explore current area - may trigger encounters"""
         self.player.explore_room()
         
-        # Generate adaptive layout
-        player_vector = self.player.state_vector()
-        layout = self.entity_ai.generate_layout(player_vector, self.player.floor)
-        
         print(f"\n{colorize_text('Exploring...', 'cyan')}")
-        print(narrator_filter.filter_text(layout["description"], "exploration"))
         
+        # Use room manager for proper exploration
+        if self.room_manager and self.room_manager.current_floor_rooms:
+            search_result = self.room_manager.search_current_room(self.player)
+            if search_result.get("message"):
+                print(search_result["message"])
+                
+            # Handle items found
+            for item in search_result.get("items", []):
+                self.player.inventory.append(item)
+                music_manager.play_sound_effect("notification")
+                print(f"\n{colorize_text('🎒 ITEM DISCOVERED:', 'yellow')}")
+                print(f"Found: {colorize_text(item['name'], 'yellow')}")
+                print(f"Added to inventory!")
+                
+            # Handle ashlight found
+            if search_result.get("ashlight", 0) > 0:
+                ashlight_found = search_result["ashlight"]
+                self.player.ashlight += ashlight_found
+                music_manager.play_sound_effect("notification")
+                print(f"\n{colorize_text('✨ ASHLIGHT DISCOVERED:', 'yellow')}")
+                print(f"Found: {colorize_text(f'{ashlight_found} shards', 'yellow')}")
+                print(f"Total: {colorize_text(str(self.player.ashlight), 'yellow')} shards")
+                
+            # Handle lore found
+            if search_result.get("lore"):
+                print(f"\n{colorize_text('Lore Fragment:', context='lore')}")
+                print(f"{colorize_text(search_result['lore'], context='lore')}")
+                
+            # Handle traps
+            if "trap" in search_result:
+                print(f"\n{colorize_text('Trap triggered during exploration!', 'red')}")
+                
         # Random encounter chance
         encounter_chance = 0.3 + (self.player.floor * 0.1)
         
         if random.random() < encounter_chance:
             # Generate mob encounter
+            player_vector = self.player.state_vector()
             mob = self.entity_ai.generate_mob(player_vector, self.player.floor)
             print(f"\n{colorize_text('A ' + mob['name'] + ' emerges!', 'red')}")
             self.start_combat(mob)
         else:
-            # Check for traps
-            trap_chance = layout.get("trap_chance", 0.1)
-            if random.random() < trap_chance:
-                trap = self.entity_ai.generate_trap(player_vector, self.player.floor)
-                self.trigger_trap(trap)
-            else:
-                # Safe exploration - minor rewards
-                self.handle_safe_exploration()
+            # Safe exploration - minor rewards
+            self.handle_safe_exploration()
+            
+        # Check for floor progression
+        progress = self.room_manager.get_floor_progress()
+        if progress["completion"] > 0.7 and not self.floor_boss_defeated:
+            print(f"\n{colorize_text('You sense the floor\'s heart beating nearby...', 'red')}")
+        elif progress["visited"] >= progress["total"] - 1:
+            # Time to advance floors
+            self.player.floor += 1
+            print(f"\n{colorize_text('The descent continues deeper...', 'cyan')}")
                 
     def start_combat(self, enemy: Dict[str, Any]):
         """Start combat encounter"""
@@ -315,13 +399,14 @@ class Game:
         
         if result == "victory":
             self.player.kill_mob(enemy["name"])
+            music_manager.play_sound_effect("victory")
             print(f"{colorize_text('Victory!', 'green')}")
             # Loot and experience
             self.handle_combat_victory(enemy)
         elif result == "fled":
             print(f"{colorize_text('You escaped the encounter.', 'yellow')}")
         else:
-            # Player died in combat
+            # Player died in combat - death sound already played in player.die()
             self.player.die()
             
     def trigger_trap(self, trap: Dict[str, Any]):
@@ -371,25 +456,40 @@ class Game:
         ashlight_reward = random.randint(5, 15) + self.player.floor
         self.player.ashlight += ashlight_reward
         
+        music_manager.play_sound_effect("notification")
         print(f"Gained {colorize_text(str(ashlight_reward), 'yellow')} Ashlight")
         
         # Possible item drop
         if random.random() < 0.3:
             item = self.entity_ai.generate_item(self.player.state_vector(), self.player.floor)
             self.player.inventory.append(item)
+            music_manager.play_sound_effect("notification")
             print(f"Found: {colorize_text(item['name'], 'yellow')}")
             
     def use_healing_item(self):
         """Use healing item or ability"""
+        
         # Simple heal for now - can be expanded
         heal_cost = 5
-        if self.player.ashlight >= heal_cost:
+        
+        print(f"\n{colorize_text('Attempting to heal...', 'cyan')}")
+        print(f"Current Health: {colorize_text(f'{self.player.health}/{self.player.max_health}', 'white')}")
+        print(f"Heal Cost: {colorize_text(f'{heal_cost} Ashlight', 'yellow')}")
+        
+        if self.player.health >= self.player.max_health:
+            print(f"{colorize_text('You are already at full health!', 'green')}")
+        elif self.player.ashlight >= heal_cost:
+            old_health = self.player.health
             self.player.ashlight -= heal_cost
             heal_amount = 20 + self.player.stats["vit"]
             self.player.heal(heal_amount)
-            print(f"{colorize_text(f'Healed for {heal_amount} HP', 'green')}")
+            actual_heal = self.player.health - old_health
+            print(f"{colorize_text(f'Healed for {actual_heal} HP ({old_health} → {self.player.health})', 'green')}")
+            print(f"Ashlight remaining: {colorize_text(str(self.player.ashlight), 'yellow')}")
         else:
-            print(f"{colorize_text('Not enough Ashlight to heal.', 'red')}")
+            print(f"{colorize_text(f'Not enough Ashlight to heal. Need {heal_cost}, have {self.player.ashlight}.', 'red')}")
+            
+        press_enter_to_continue()
             
     def attempt_flee(self):
         """Attempt to flee current situation"""
@@ -404,24 +504,51 @@ class Game:
             print(f"{colorize_text('Nothing to flee from.', 'white')}")
             
     def show_inventory(self):
-        """Show player inventory"""
+        """Show interactive inventory with item details"""
         clear_screen()
-        print(f"{colorize_text('═══ INVENTORY ═══', 'cyan')}")
+        print(f"{colorize_text('═══ INVENTORY MANAGEMENT ═══', 'cyan')}")
         
         if not self.player.inventory:
-            print(f"{colorize_text('Empty', 'white')}")
+            print(f"{colorize_text('Your inventory is empty.', 'white')}")
+            print(f"{colorize_text('Explore to find items!', 'yellow')}")
+            press_enter_to_continue()
+            return
+        
+        # Show current equipment
+        if self.player.equipped_weapon:
+            print(f"Equipped: {colorize_text(self.player.equipped_weapon['name'], 'green')}")
         else:
-            for i, item in enumerate(self.player.inventory):
-                print(f"{i+1}. {colorize_text(item['name'], 'yellow')}")
+            print(f"Equipped: {colorize_text('None', 'white')}")
+            
+        print(f"\nInventory Items:")
+        for i, item in enumerate(self.player.inventory):
+            print(f"  {i+1}. {colorize_text(item['name'], 'yellow')}")
+        print(f"  0. Return to game")
+        
+        try:
+            choice = input(f"\n{colorize_text('Examine item (0-{len(self.player.inventory)}):', 'white')} ").strip()
+            
+            if choice == '0':
+                return
                 
-        press_enter_to_continue()
+            item_index = int(choice) - 1
+            if 0 <= item_index < len(self.player.inventory):
+                item = self.player.inventory[item_index]
+                self.show_item_details(item, item_index)
+            else:
+                print(f"{colorize_text('Invalid choice.', 'red')}")
+                press_enter_to_continue()
+                
+        except ValueError:
+            print(f"{colorize_text('Please enter a number.', 'red')}")
+            press_enter_to_continue()
         
     def show_detailed_stats(self):
-        """Show detailed player statistics"""
+        """Show detailed player statistics with upgrade options"""
         clear_screen()
         status = self.player.get_status_summary()
         
-        print(f"{colorize_text('═══ DETAILED STATISTICS ═══', 'cyan')}")
+        print(f"{colorize_text('═══ CHARACTER PROGRESSION ═══', 'cyan')}")
         print(format_stats_display(self.player))
         
         # Show hidden metrics if sanity is low
@@ -429,30 +556,237 @@ class Game:
             print(f"\n{colorize_text('═══ ENTITY ANALYSIS ═══', 'red')}")
             print(f"Predictability: {colorize_text(status['predictability'], 'red')}")
             print(f"Sanity: {colorize_text(status['sanity'], 'red')}")
+        
+        # Show upgrade options
+        self.show_stat_upgrade_menu()
+        
+    def show_stat_upgrade_menu(self):
+        """Allow players to upgrade stats with Ashlight"""
+        print(f"\n{colorize_text('═══ STAT UPGRADES ═══', 'yellow')}")
+        print(f"Available Ashlight: {colorize_text(str(self.player.ashlight), 'yellow')} shards")
+        print(f"Upgrade Cost: {colorize_text('10 Ashlight per stat point', 'white')}")
+        
+        print(f"\nUpgrade Options:")
+        stats = ["str", "dex", "int", "fth", "end", "vit"]
+        for i, stat in enumerate(stats):
+            current_value = self.player.stats[stat]
+            print(f"  {i+1}. {stat.upper()}: {current_value} → {current_value + 1}")
+        print(f"  0. Return to game")
+        
+        try:
+            choice = input(f"\n{colorize_text('Upgrade stat (0-6):', 'white')} ").strip()
+            
+            if choice == '0':
+                return
+                
+            stat_index = int(choice) - 1
+            if 0 <= stat_index < len(stats):
+                stat_name = stats[stat_index]
+                if self.player.ashlight >= 10:
+                    self.player.ashlight -= 10
+                    self.player.stats[stat_name] += 1
+                    
+                    # Play stat upgrade sound
+                    music_manager.play_sound_effect("stat")
+                    
+                    # Update derived stats
+                    if stat_name == "vit":
+                        old_max = self.player.max_health
+                        self.player.max_health = self.player.stats["vit"] * 10
+                        self.player.health += (self.player.max_health - old_max)
+                    elif stat_name == "end":
+                        old_max = self.player.max_stamina  
+                        self.player.max_stamina = self.player.stats["end"] * 10
+                        self.player.stamina += (self.player.max_stamina - old_max)
+                    
+                    print(f"\n{colorize_text(f'{stat_name.upper()} increased to {self.player.stats[stat_name]}!', 'green')}")
+                    print(f"Remaining Ashlight: {colorize_text(str(self.player.ashlight), 'yellow')}")
+                    
+                    if stat_name in ["vit", "end"]:
+                        print(f"{colorize_text('Derived stats updated!', 'green')}")
+                else:
+                    print(f"{colorize_text('Not enough Ashlight! Need 10, have ' + str(self.player.ashlight), 'red')}")
+            else:
+                print(f"{colorize_text('Invalid choice.', 'red')}")
+                
+        except ValueError:
+            print(f"{colorize_text('Please enter a number.', 'red')}")
             
         press_enter_to_continue()
         
+    def show_item_details(self, item: Dict[str, Any], item_index: int):
+        """Show detailed item information and equip options"""
+        clear_screen()
+        print(f"{colorize_text('═══ ITEM DETAILS ═══', 'yellow')}")
+        
+        print(f"\n{colorize_text(item['name'], 'yellow')}")
+        
+        # Show item stats
+        print(f"\n{colorize_text('Stats:', 'white')}")
+        stats = item.get('stats', {})
+        for stat_name, stat_value in stats.items():
+            if stat_name == 'damage' and stat_value > 0:
+                print(f"  Damage: {colorize_text(f'+{stat_value}', 'red')}")
+            elif stat_name == 'defense' and stat_value > 0:
+                print(f"  Defense: {colorize_text(f'+{stat_value}', 'green')}")
+            elif stat_name == 'effect' and stat_value > 0:
+                print(f"  Special Effect: {colorize_text(f'+{stat_value}', 'cyan')}")
+            elif stat_name == 'rarity':
+                rarity_names = ["Common", "Uncommon", "Rare", "Epic"]
+                rarity_name = rarity_names[min(stat_value, len(rarity_names) - 1)]
+                print(f"  Rarity: {colorize_text(rarity_name, 'magenta')}")
+                
+        # Show curse risk if present
+        if item.get('curse_risk', 0) > 0:
+            curse_risk = item['curse_risk']
+            print(f"  {colorize_text(f'Curse Risk: {curse_risk:.1%}', 'red')}")
+            
+        # Show equip options
+        print(f"\n{colorize_text('Actions:', 'cyan')}")
+        
+        if item.get('stats', {}).get('damage', 0) > 0:
+            # Weapon
+            if self.player.equipped_weapon and self.player.equipped_weapon == item:
+                print(f"  1. {colorize_text('Unequip', 'red')}")
+            else:
+                print(f"  1. {colorize_text('Equip as weapon', 'green')}")
+        else:
+            print(f"  1. {colorize_text('Use/Consume', 'green')}")
+            
+        print(f"  2. {colorize_text('Drop item', 'red')}")
+        print(f"  0. {colorize_text('Back to inventory', 'white')}")
+        
+        try:
+            action = input(f"\n{colorize_text('Choose action:', 'white')} ").strip()
+            
+            if action == '0':
+                self.show_inventory()  # Go back to inventory
+            elif action == '1':
+                self.handle_item_action(item, item_index, "primary")
+            elif action == '2':
+                self.handle_item_drop(item, item_index)
+            else:
+                print(f"{colorize_text('Invalid choice.', 'red')}")
+                press_enter_to_continue()
+                self.show_item_details(item, item_index)  # Return to item details
+                
+        except ValueError:
+            print(f"{colorize_text('Please enter a number.', 'red')}")
+            press_enter_to_continue()
+            self.show_item_details(item, item_index)
+            
+    def handle_item_action(self, item: Dict[str, Any], item_index: int, action_type: str):
+        """Handle equipping or using items"""
+        if item.get('stats', {}).get('damage', 0) > 0:
+            # Weapon equipping
+            if self.player.equipped_weapon == item:
+                # Unequip
+                self.player.equipped_weapon = None
+                print(f"\n{colorize_text('Unequipped ' + item['name'], 'yellow')}")
+            else:
+                # Equip weapon
+                if self.player.equipped_weapon:
+                    print(f"Replacing {colorize_text(self.player.equipped_weapon['name'], 'yellow')}")
+                self.player.equipped_weapon = item
+                music_manager.play_sound_effect("notification")
+                print(f"\n{colorize_text('Equipped ' + item['name'] + '!', 'green')}")
+        else:
+            # Consumable item
+            self.use_consumable_item(item, item_index)
+            
+        press_enter_to_continue()
+        
+    def handle_item_drop(self, item: Dict[str, Any], item_index: int):
+        """Handle dropping items"""
+        print(f"\n{colorize_text('Dropped ' + item['name'], 'red')}")
+        
+        # Remove from inventory
+        if 0 <= item_index < len(self.player.inventory):
+            dropped_item = self.player.inventory.pop(item_index)
+            
+            # Unequip if it was equipped
+            if self.player.equipped_weapon == dropped_item:
+                self.player.equipped_weapon = None
+                print(f"{colorize_text('Weapon unequipped.', 'yellow')}")
+                
+        press_enter_to_continue()
+        
+    def use_consumable_item(self, item: Dict[str, Any], item_index: int):
+        """Use consumable items"""
+        # Basic consumable effects
+        stats = item.get('stats', {})
+        
+        if stats.get('effect', 0) > 0:
+            # Healing effect
+            heal_amount = stats['effect'] * 5
+            self.player.heal(heal_amount)
+            print(f"\n{colorize_text('Used ' + item['name'] + f' - Healed {heal_amount} HP!', 'green')}")
+            
+            # Remove from inventory
+            self.player.inventory.pop(item_index)
+        else:
+            print(f"\n{colorize_text('This item cannot be consumed.', 'yellow')}")
+        
+    def move_to_new_room(self):
+        """Move to a new room/area"""
+        if not self.room_manager:
+            print(f"{colorize_text('Nowhere to move.', 'white')}")
+            return
+            
+        # Generate floor layout if not already done
+        if not self.room_manager.current_floor_rooms:
+            layout = self.room_manager.generate_floor_layout(self.player.floor, self.player.state_vector())
+            print(f"\n{colorize_text('Floor layout generated:', 'cyan')}")
+            print(f"{layout.get('layout_description', 'The Entity shapes your path...')}")
+            
+        # Try to move forward
+        result = self.room_manager.move_player("forward", self.player)
+        print(f"\n{result}")
+        
+        # Check if we've reached boss room
+        if self.room_manager.is_boss_room():
+            print(f"\n{colorize_text('You sense a powerful presence ahead...', 'red')}")
+            
     def attempt_npc_interaction(self):
         """Attempt to interact with NPCs"""
+        
+        print(f"\n{colorize_text('Looking for someone to talk to...', 'cyan')}")
+        
         # Check if NPC is present
         available_npcs = self.npc_manager.get_available_npcs(self.player.floor)
         
         if not available_npcs:
-            print(f"{colorize_text('No one to talk to here.', 'white')}")
+            print(f"{colorize_text('The shadows are empty. No one to talk to here.', 'white')}")
+            print(f"{colorize_text('(NPCs may appear in different rooms or floors)', 'yellow')}")
+            press_enter_to_continue()
             return
             
         # Show available NPCs
-        print(f"\n{colorize_text('NPCs present:', 'green')}")
+        print(f"\n{colorize_text('You sense presences nearby:', 'green')}")
         for i, npc in enumerate(available_npcs):
-            print(f"  {i+1}. {npc}")
+            print(f"  {colorize_text(str(i+1), 'cyan')}. {colorize_text(npc, 'green')}")
+        print(f"  {colorize_text('0', 'cyan')}. {colorize_text('Leave', 'white')}")
             
         try:
-            choice = int(input(f"{colorize_text('Talk to (number):', 'white')} ")) - 1
+            choice_input = input(f"\n{colorize_text('Talk to (number):', 'white')} ").strip()
+            
+            if choice_input == '0':
+                print(f"{colorize_text('You step back into the shadows.', 'white')}")
+                press_enter_to_continue()
+                return
+                
+            choice = int(choice_input) - 1
             if 0 <= choice < len(available_npcs):
                 npc_name = available_npcs[choice]
+                print(f"\n{colorize_text(f'Approaching {npc_name}...', 'green')}")
                 self.npc_manager.interact(self.player, npc_name)
+                press_enter_to_continue()
+            else:
+                print(f"{colorize_text('Invalid choice. No one by that number.', 'red')}")
+                press_enter_to_continue()
         except (ValueError, IndexError):
-            print(f"{colorize_text('Invalid choice.', 'red')}")
+            print(f"{colorize_text('Invalid input. Please enter a number.', 'red')}")
+            press_enter_to_continue()
             
     def advance_floor(self):
         """Advance to next floor"""
@@ -462,6 +796,9 @@ class Game:
         clear_screen()
         print(f"\n{create_ascii_border(f'FLOOR {self.current_floor}')}")
         
+        # Generate new floor layout
+        layout = self.room_manager.generate_floor_layout(self.current_floor, self.player.state_vector())
+        
         # Generate floor-specific lore
         floor_lore = self.entity_ai.generate_lore(
             self.player.state_vector(), 
@@ -470,6 +807,7 @@ class Game:
         )
         
         print(f"\n{colorize_text(floor_lore, context='lore')}")
+        print(f"\n{layout.get('layout_description', 'The Entity reshapes reality around you.')}")
         
         # Check for boss encounter
         if self.should_spawn_boss():
@@ -513,6 +851,7 @@ class Game:
         
         if self.player.health > 0:
             self.floor_boss_defeated = True
+            music_manager.play_sound_effect("victory")  # Boss victory sound
             print(f"\n{colorize_text('BOSS DEFEATED!', 'green')}")
             
             # Major rewards
@@ -520,6 +859,7 @@ class Game:
             self.player.ashlight += ashlight_reward
             self.player.skill_points += 1
             
+            music_manager.play_sound_effect("stat")  # Reward gain sound
             print(f"Gained {ashlight_reward} Ashlight and 1 Skill Point!")
             
     def check_ending_conditions(self) -> bool:

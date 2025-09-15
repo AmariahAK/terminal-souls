@@ -11,7 +11,7 @@ import numpy as np
 try:
     import colorama
     from colorama import Fore, Back, Style
-    colorama.init()
+    colorama.init(autoreset=True)  # Auto-reset colors to prevent bleeding
     COLORS_AVAILABLE = True
 except ImportError:
     COLORS_AVAILABLE = False
@@ -42,21 +42,34 @@ except ImportError:
     MUSIC_AVAILABLE = False
 
 class MusicManager:
-    """Manage background music and audio distortion"""
+    """Manage background music and sound effects"""
     
     def __init__(self):
         self.music_enabled = MUSIC_AVAILABLE
         self.current_track = None
-        self.volume = 0.3
+        self.volume = 0.6  # Increased from 0.3 for better audibility
         self.is_playing = False
+        self.is_paused = False
+        self.sfx_volume = 0.8  # Sound effects volume
+        
+        # Initialize sound effect channels if available
+        if self.music_enabled:
+            try:
+                pygame.mixer.set_num_channels(8)  # Allow multiple sound effects
+            except pygame.error:
+                pass
         
     def play_background(self, track_path: str = None):
         """Play background music"""
         if not self.music_enabled:
+            print("Warning: Music system not available (pygame not installed)")
             return
             
         if track_path is None:
-            track_path = "/Users/amariah/Documents/GitHub/terminal-souls/lore/music/background.mp3"
+            # Use relative path from the script location
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            track_path = os.path.join(script_dir, "lore", "music", "background.mp3")
             
         if os.path.exists(track_path):
             try:
@@ -65,20 +78,50 @@ class MusicManager:
                 pygame.mixer.music.play(-1)  # Loop indefinitely
                 self.is_playing = True
                 self.current_track = track_path
-            except pygame.error:
-                print("Warning: Could not play background music")
+                print(f"♪ Background music started: {os.path.basename(track_path)}")
+            except pygame.error as e:
+                print(f"Warning: Could not play background music - {str(e)}")
         else:
             print(f"Warning: Music file not found at {track_path}")
     
     def pause(self):
         """Pause music for input"""
-        if self.music_enabled and self.is_playing:
-            pygame.mixer.music.pause()
+        if self.music_enabled and self.is_playing and not self.is_paused:
+            try:
+                pygame.mixer.music.pause()
+                self.is_paused = True
+            except pygame.error:
+                pass  # Ignore errors if music isn't playing
     
     def unpause(self):
         """Resume music"""
-        if self.music_enabled and self.is_playing:
-            pygame.mixer.music.unpause()
+        if self.music_enabled and self.is_playing and self.is_paused:
+            try:
+                pygame.mixer.music.unpause()
+                self.is_paused = False
+            except pygame.error:
+                pass  # Ignore errors if music isn't paused
+    
+    def play_sound_effect(self, sfx_name: str):
+        """Play sound effect without interrupting background music"""
+        if not self.music_enabled:
+            return
+            
+        # Get sound effect path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        sfx_path = os.path.join(script_dir, "lore", "music", f"{sfx_name}.mp3")
+        
+        if os.path.exists(sfx_path):
+            try:
+                # Load and play sound effect on a separate channel
+                sfx_sound = pygame.mixer.Sound(sfx_path)
+                sfx_sound.set_volume(self.sfx_volume)
+                sfx_sound.play()
+                # Sound effect plays silently alongside background music
+            except pygame.error as e:
+                print(f"Warning: Could not play {sfx_name} sound - {str(e)}")
+        else:
+            print(f"Warning: Sound effect {sfx_name}.mp3 not found")
     
     def distort_for_sanity(self, sanity: float):
         """Distort music based on low sanity"""
@@ -308,29 +351,37 @@ def wobble_text(text: str, intensity: float = 0.3) -> str:
 
 def format_stats_display(player) -> str:
     """Format player stats for display"""
-    stats_text = f"""
-{colorize_text('═══ CHARACTER STATUS ═══', context='success')}
-Name: {colorize_text(player.name, 'white')} | Class: {colorize_text(player.player_class, 'cyan')}
-Floor: {colorize_text(str(player.floor), 'red')} | Deaths: {colorize_text(str(player.deaths), 'red')}
-
-{colorize_text('╔═══ STATS ═══╗', 'cyan')}
+    # Build stats display without embedded colors to prevent ANSI issues
+    header = colorize_text('═══ CHARACTER STATUS ═══', 'green')
+    name_class = f"Name: {player.name} | Class: {player.player_class}"
+    floor_deaths = f"Floor: {player.floor} | Deaths: {player.deaths}"
+    
+    stats_box = f"""╔═══ STATS ═══╗
 ║ STR: {player.stats['str']:2d} ║ DEX: {player.stats['dex']:2d} ║
 ║ INT: {player.stats['int']:2d} ║ FTH: {player.stats['fth']:2d} ║  
 ║ END: {player.stats['end']:2d} ║ VIT: {player.stats['vit']:2d} ║
-{colorize_text('╚════════════╝', 'cyan')}
-
-Health: {colorize_text(f'{player.health}/{player.max_health}', 'red')}
-Stamina: {colorize_text(f'{player.stamina}/{player.max_stamina}', 'yellow')}
-Ashlight: {colorize_text(str(player.ashlight), 'yellow')}
-"""
+╚════════════╝"""
+    
+    # Clean, readable resource display
+    health_display = f"Health: {player.health}/{player.max_health} HP"
+    stamina_display = f"Stamina: {player.stamina}/{player.max_stamina} SP"
+    ashlight_display = f"Ashlight: {player.ashlight} shards"
+    
+    # Combine everything
+    stats_text = f"\n{header}\n{name_class}\n{floor_deaths}\n\n{stats_box}\n\n{health_display}\n{stamina_display}\n{ashlight_display}"
     
     if player.skills:
-        stats_text += f"\nSkills: {colorize_text(', '.join(player.skills), 'green')}"
+        skills_display = f"Skills: {', '.join(player.skills)}"
+        stats_text += f"\n{skills_display}"
     
     # Show sanity if low or if player has debug access
     if player.sanity < 50:
-        sanity_color = 'red' if player.sanity < 30 else 'yellow'
-        stats_text += f"\nSanity: {colorize_text(f'{player.sanity:.1f}', sanity_color)}"
+        sanity_display = f"Sanity: {player.sanity:.1f}/100"
+        if player.sanity < 30:
+            sanity_display = colorize_text(sanity_display + " ⚠️ CRITICAL", 'red')
+        else:
+            sanity_display = colorize_text(sanity_display + " ⚠️ LOW", 'yellow')
+        stats_text += f"\n{sanity_display}"
     
     return stats_text
 
