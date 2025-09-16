@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal Souls - AI-Orchestrated Psychological Horror</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        body {
+            background: #000;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            border: 2px solid #00ff00;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: rgba(0, 255, 0, 0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            color: #ff0000;
+            text-shadow: 0 0 10px #ff0000;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            color: #ffff00;
+            font-style: italic;
+        }
+        
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .output {
+            background: #111;
+            border: 1px solid #333;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-area input {
+            flex: 1;
+            background: #222;
+            border: 1px solid #555;
+            color: #00ff00;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+        }
+        
+        .input-area button {
+            background: #333;
+            border: 1px solid #555;
+            color: #00ff00;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .input-area button:hover {
+            background: #555;
+        }
+        
+        .input-area button:disabled {
+            background: #222;
+            color: #666;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 10px;
+            color: #ffff00;
+        }
+        
+        .warning {
+            color: #ff6600;
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ff6600;
+            background: rgba(255, 102, 0, 0.1);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 1px solid #333;
+            color: #888;
+        }
+        
+        .footer a {
+            color: #00ffff;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* ANSI color simulation */
+        .ansi-red { color: #ff5555; }
+        .ansi-green { color: #55ff55; }
+        .ansi-yellow { color: #ffff55; }
+        .ansi-blue { color: #5555ff; }
+        .ansi-magenta { color: #ff55ff; }
+        .ansi-cyan { color: #55ffff; }
+        .ansi-white { color: #ffffff; }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .output {
+                height: 300px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔥 TERMINAL SOULS 🔥</h1>
+            <p>AI-Orchestrated Psychological Horror Roguelike</p>
+            <p style="color: #ff6600;">The Entity compiles your fate. Every choice feeds its understanding.</p>
+        </div>
+        
+        <div class="warning">
+            ⚠️ <strong>WARNING:</strong> The Entity adapts—predictability will kill you.
+            No saves. No mercy. Only descent.
+        </div>
+        
+        <div class="game-area">
+            <div id="output" class="output">
+                <div style="color: #00ffff; text-align: center;">
+                    Welcome to Terminal Souls<br>
+                    Click "Start Game" to begin your descent into the Entity's embrace...<br><br>
+                    
+                    <span style="color: #ffff00;">
+                    ✨ Features:<br>
+                    • Turn-based combat with AI adaptation<br>
+                    • 9-chapter blueprint system per Book<br>
+                    • Souls-like stat scaling with Entity counters<br>
+                    • Comprehensive help system (type 'help' at start)<br>
+                    • Safe vs hostile zone mechanics<br>
+                    </span>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <input type="text" id="gameInput" placeholder="Type your commands here..." disabled>
+                <button id="sendBtn" onclick="sendInput()" disabled>Send</button>
+                <button id="startBtn" onclick="startGame()">Start Game</button>
+            </div>
+        </div>
+        
+        <div class="status" id="status">
+            Ready to begin descent...
+        </div>
+        
+        <div class="footer">
+            <p>If Terminal Souls corrupts your brain in the best way:</p>
+            <p><a href="https://buymeacoffee.com/amariahak" target="_blank">☕ Fuel the descent</a></p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                Made with 🔥 and ☕ by <a href="https://github.com/AmariahAK" target="_blank">AmariahAK</a><br>
+                Where AI meets horror, and patterns meet their doom.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let gameActive = false;
+        
+        // DOM elements
+        const output = document.getElementById('output');
+        const input = document.getElementById('gameInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+        
+        // Socket event handlers
+        socket.on('game_started', function(data) {
+            gameActive = true;
+            output.innerHTML = '';
+            updateStatus('Game started - The Entity awakens...');
+            enableInput();
+            startBtn.disabled = true;
+            startBtn.textContent = 'Game Running';
+        });
+        
+        socket.on('game_output', function(data) {
+            appendOutput(data.text);
+        });
+        
+        socket.on('request_input', function(data) {
+            updateStatus('Waiting for your input...');
+            if (data.prompt) {
+                appendOutput(data.prompt);
+            }
+            input.focus();
+        });
+        
+        socket.on('game_ended', function() {
+            gameActive = false;
+            updateStatus('Game ended - The Entity sleeps...');
+            disableInput();
+            startBtn.disabled = false;
+            startBtn.textContent = 'Start New Game';
+        });
+        
+        socket.on('game_error', function(data) {
+            appendOutput(`\n❌ ERROR: ${data.error}\nThe code bleeds. The Entity laughs.`);
+            updateStatus('Game error occurred');
+            disableInput();
+            startBtn.disabled = false;
+            startBtn.textContent = 'Start New Game';
+        });
+        
+        // Functions
+        function startGame() {
+            if (!gameActive) {
+                updateStatus('Initializing the Entity...');
+                socket.emit('start_game');
+            }
+        }
+        
+        function sendInput() {
+            if (gameActive && input.value.trim()) {
+                const userInput = input.value.trim();
+                
+                // Show user input in output
+                appendOutput(`> ${userInput}`);
+                
+                // Send to game
+                socket.emit('send_input', {input: userInput});
+                
+                // Clear input
+                input.value = '';
+                
+                updateStatus('Processing...');
+            }
+        }
+        
+        function appendOutput(text) {
+            // Simple ANSI color conversion
+            let processedText = text
+                .replace(/\x1b\[31m/g, '<span class="ansi-red">')
+                .replace(/\x1b\[32m/g, '<span class="ansi-green">')
+                .replace(/\x1b\[33m/g, '<span class="ansi-yellow">')
+                .replace(/\x1b\[34m/g, '<span class="ansi-blue">')
+                .replace(/\x1b\[35m/g, '<span class="ansi-magenta">')
+                .replace(/\x1b\[36m/g, '<span class="ansi-cyan">')
+                .replace(/\x1b\[37m/g, '<span class="ansi-white">')
+                .replace(/\x1b\[0m/g, '</span>')
+                .replace(/\x1b\[[0-9;]*m/g, ''); // Remove other ANSI codes
+            
+            output.innerHTML += processedText + '<br>';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function updateStatus(text) {
+            status.textContent = text;
+        }
+        
+        function enableInput() {
+            input.disabled = false;
+            sendBtn.disabled = false;
+        }
+        
+        function disableInput() {
+            input.disabled = true;
+            sendBtn.disabled = true;
+        }
+        
+        // Enter key support
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendInput();
+            }
+        });
+        
+        // Auto-focus input when game is active
+        setInterval(() => {
+            if (gameActive && document.activeElement !== input) {
+                input.focus();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
