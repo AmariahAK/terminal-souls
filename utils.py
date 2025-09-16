@@ -35,10 +35,15 @@ except ImportError:
         RESET_ALL = ""
 
 try:
+    # Set pygame environment variables for headless deployment
+    import os
+    os.environ['SDL_AUDIODRIVER'] = 'dummy'
+    os.environ['SDL_VIDEODRIVER'] = 'dummy'
+    
     import pygame
     pygame.mixer.init()
     MUSIC_AVAILABLE = True
-except ImportError:
+except (ImportError, pygame.error):
     MUSIC_AVAILABLE = False
 
 class MusicManager:
