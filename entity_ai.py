@@ -35,17 +35,18 @@ class EntityAI:
         self.layout_gen = GeneratorMLP(20, 3)  # [room_count, exit_density, trap_chance]
         self.trap_gen = GeneratorMLP(20, 2)  # [type_bias, severity]
         self.ui_gen = GeneratorMLP(20, 3)  # [delay_ms, shuffle_chance, phantom_chance]
+        self.chapter_gen = GeneratorMLP(20, 9)  # New: chapter blueprint generator
         
         # Set all models to evaluation mode (no training)
         for model in [self.mob_gen, self.item_gen, self.boss_gen, self.lore_gen, 
-                     self.shop_gen, self.layout_gen, self.trap_gen, self.ui_gen]:
+                     self.shop_gen, self.layout_gen, self.trap_gen, self.ui_gen, self.chapter_gen]:
             model.eval()
         
         # Pre-warm with dummy inputs for "anticipatory" feel
         with torch.no_grad():  # Disable gradients for efficiency
             dummy_input = torch.zeros(1, 20)
             for model in [self.mob_gen, self.item_gen, self.boss_gen, self.lore_gen, 
-                         self.shop_gen, self.layout_gen, self.trap_gen, self.ui_gen]:
+                         self.shop_gen, self.layout_gen, self.trap_gen, self.ui_gen, self.chapter_gen]:
                 _ = model(dummy_input)
         
         # Game bible for mutable lore
@@ -54,6 +55,11 @@ class EntityAI:
         
         # Entity whisper system
         self.whisper_archive = []
+        
+        # Adaptive tracking systems
+        self.player_adaptation_history = []
+        self.current_chapter_blueprint = None
+        self.chaos_mode_active = False
         
     def load_game_bible(self):
         """Load or create the mutable game bible"""
@@ -97,6 +103,126 @@ class EntityAI:
         bias = (floor + deaths + (1 - sanity)) * 0.15
         return min(bias, 1.0)  # Cap at 1.0
     
+    def generate_chapter_blueprint(self, player_vector: List[float], run_number: int) -> Dict[str, Any]:
+        """Generate AI-driven chapter sequence that changes on each death"""
+        with torch.no_grad():
+            vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
+            outputs = self.chapter_gen(vec_tensor)[0]
+        
+        # Use outputs to determine chapter structure (9 chapters total)
+        chapter_sequence = []
+        
+        for i in range(9):
+            output_val = float(outputs[i])
+            
+            # Convert neural output to chapter type
+            if output_val < 2.5:
+                chapter_type = "safe"
+            elif output_val < 5.0:
+                chapter_type = "combat"
+            elif output_val < 7.0:
+                chapter_type = "shop"
+            elif output_val < 8.5:
+                chapter_type = "miniboss"
+            else:
+                chapter_type = "boss"
+            
+            # Ensure some mandatory structure
+            if i == 0:  # First chapter always safe
+                chapter_type = "safe"
+            elif i == 8:  # Last chapter always boss
+                chapter_type = "boss"
+            elif i in [3, 6]:  # Mid-point minibosses
+                chapter_type = "miniboss" if random.random() < 0.7 else chapter_type
+                
+            chapter_sequence.append({
+                "chapter": i + 1,
+                "type": chapter_type,
+                "difficulty_modifier": self.calculate_entity_bias(player_vector),
+                "special_modifier": self.get_chapter_special_modifier(i + 1, player_vector)
+            })
+        
+        # Add chaos mode corruption if active
+        if self.chaos_mode_active:
+            for chapter in chapter_sequence:
+                if random.random() < 0.2:  # 20% corruption chance
+                    chapter["corrupted"] = True
+                    chapter["corruption_type"] = random.choice([
+                        "phantom_enemies", "reversed_controls", "reality_glitch", "time_distortion"
+                    ])
+        
+        self.current_chapter_blueprint = {
+            "sequence": chapter_sequence,
+            "run_number": run_number,
+            "generated_for": player_vector.copy(),
+            "entity_comment": self.get_entity_blueprint_comment(player_vector, run_number)
+        }
+        
+        return self.current_chapter_blueprint
+    
+    def get_chapter_special_modifier(self, chapter_num: int, player_vector: List[float]) -> Dict[str, Any]:
+        """Get special modifiers for specific chapters"""
+        strength_bias = player_vector[0]  # STR
+        dex_bias = player_vector[1]       # DEX
+        int_bias = player_vector[2]       # INT
+        fth_bias = player_vector[3]       # FTH
+        predictability = player_vector[9] if len(player_vector) > 9 else 0.5
+        
+        modifiers = {}
+        
+        # Adaptive counters based on player build
+        if strength_bias > 0.7:  # High STR build
+            modifiers["armored_enemies"] = True
+            modifiers["anti_strength"] = "Mobs spawn with high armor and dodge"
+            
+        if dex_bias > 0.7:  # High DEX build  
+            modifiers["trap_heavy"] = True
+            modifiers["anti_dexterity"] = "Increased trap spawn rate and feint attacks"
+            
+        if int_bias > 0.7 or fth_bias > 0.7:  # Magic builds
+            modifiers["magic_dampening"] = True  
+            modifiers["anti_magic"] = "Enemies resist spells and drain mana"
+            
+        # Predictability punishments
+        if predictability > 0.8:
+            modifiers["entity_intervention"] = True
+            modifiers["punishment"] = "The Entity actively counters predictable patterns"
+            
+        return modifiers
+    
+    def get_entity_blueprint_comment(self, player_vector: List[float], run_number: int) -> str:
+        """Generate Entity's comment on the blueprint"""
+        deaths = int(player_vector[11]) if len(player_vector) > 11 else 0
+        predictability = player_vector[9] if len(player_vector) > 9 else 0.5
+        
+        if run_number == 1:
+            return "Fresh data to compile. Let us begin the harvest."
+        elif deaths < 3:
+            return "Your patterns emerge. The compilation accelerates."
+        elif predictability > 0.8:
+            return "So... predictable. The outcome is predetermined."
+        elif deaths > 10:
+            return "Still you rise? Admirable. Futile, but admirable."
+        else:
+            return "Adaptation detected. Countermeasures engaged."
+    
+    def activate_chaos_mode(self, player_deaths: int):
+        """Activate Chaos Mode after 10+ deaths"""
+        if player_deaths >= 10 and not self.chaos_mode_active:
+            self.chaos_mode_active = True
+            return {
+                "activated": True,
+                "message": "CHAOS MODE ACTIVATED: The Entity's grip on reality weakens...",
+                "corruption_chance": 0.2,
+                "effects": [
+                    "20% of AI outputs are corrupted",
+                    "Mobs gain 'Chaos' prefixes",
+                    "Dialogue becomes unstable",
+                    "Reality glitches more frequently"
+                ]
+            }
+        return {"activated": False}
+    
     def apply_glitch_noise(self, outputs: torch.Tensor, sanity: float) -> torch.Tensor:
         """Add glitch noise for low sanity"""
         if sanity < 0.3:
@@ -105,7 +231,7 @@ class EntityAI:
         return outputs
     
     def generate_mob(self, player_vector: List[float], floor: int) -> Dict[str, Any]:
-        """Generate adaptive mob that counters player"""
+        """Generate adaptive mob that counters player with enhanced AI"""
         with torch.no_grad():
             vec_tensor = torch.tensor([player_vector], dtype=torch.float32)
             outputs = self.mob_gen(vec_tensor)[0]
@@ -113,35 +239,80 @@ class EntityAI:
         # Apply glitch noise for low sanity
         outputs = self.apply_glitch_noise(outputs, player_vector[10])
         
-        # Counter player strengths
-        str_bias = player_vector[0] * 0.3  # High STR? Boost mob DEX
-        dex_bias = player_vector[1] * 0.2  # High DEX? Boost mob VIT
+        # Enhanced adaptive counters
+        str_bias = player_vector[0] * 0.5   # STR → spawn high-armor, high-dodge mobs
+        dex_bias = player_vector[1] * 0.4   # DEX → spawn feinting, trap-laying mobs  
+        int_bias = player_vector[2] * 0.3   # INT → spawn magic-dampening mobs
+        fth_bias = player_vector[3] * 0.3   # FTH → spawn faith-corrupting mobs
+        end_bias = player_vector[4] * 0.4   # END → spawn stamina-draining mobs
+        vit_bias = player_vector[5] * 0.2   # VIT → spawn poison/DoT mobs
+        
+        # Track player's predictability for smarter counters
+        predictability = player_vector[9] if len(player_vector) > 9 else 0.5
         
         stats = {
-            "str": max(1, int(outputs[0] + dex_bias)),
-            "dex": max(1, int(outputs[1] + str_bias)),
-            "int": max(1, int(outputs[2])),
-            "fth": max(1, int(outputs[3])),
-            "end": max(1, int(outputs[4])),
-            "vit": max(1, int(outputs[5]))
+            "str": max(1, int(outputs[0] + dex_bias + (predictability * 2))),
+            "dex": max(1, int(outputs[1] + str_bias + (predictability * 3))),  # High for feints
+            "int": max(1, int(outputs[2] + int_bias)),
+            "fth": max(1, int(outputs[3] + fth_bias)),
+            "end": max(1, int(outputs[4] + end_bias)),
+            "vit": max(1, int(outputs[5] + vit_bias + (predictability * 2)))
         }
         
-        # Procedural naming based on player stats
+        # Add special abilities based on player weaknesses
+        special_abilities = []
+        
+        if str_bias > 0.4:
+            special_abilities.extend(["armor_plating", "dodge_mastery"])
+        if dex_bias > 0.4:
+            special_abilities.extend(["feint_attack", "trap_spawn"])
+        if int_bias > 0.4 or fth_bias > 0.4:
+            special_abilities.extend(["magic_dampening", "spell_corruption"])
+        if end_bias > 0.3:
+            special_abilities.extend(["stamina_drain", "exhaustion_aura"])
+        if predictability > 0.7:
+            special_abilities.extend(["pattern_prediction", "counter_strike"])
+        
+        # Procedural naming based on counters
+        counter_prefixes = {
+            "armor_plating": "Armored",
+            "feint_attack": "Deceptive", 
+            "magic_dampening": "Nullifying",
+            "stamina_drain": "Exhausting",
+            "pattern_prediction": "Prescient"
+        }
+        
         prefixes = ["Glitched", "Echo", "Void", "Corrupted", "Phantom"]
         base_names = ["Shardfeeder", "Vessel", "Watcher", "Hollow", "Phantom"]
         suffixes = [f"Echo-{random.randint(10,99)}", "Fragment", "Shadow", "Remnant"]
         
-        if player_vector[2] > 0.7:  # High INT
-            name = f"{random.choice(prefixes)} {random.choice(base_names)} {random.choice(suffixes)}"
+        # Add counter-specific prefix if abilities present
+        name_prefix = ""
+        if special_abilities:
+            primary_ability = random.choice(special_abilities)
+            if primary_ability in counter_prefixes:
+                name_prefix = counter_prefixes[primary_ability] + " "
+        
+        if predictability > 0.8:  # Highly predictable player gets complex names
+            name = f"{name_prefix}{random.choice(prefixes)} {random.choice(base_names)} {random.choice(suffixes)}"
+        elif len(special_abilities) > 2:  # Multi-counter mobs
+            name = f"{name_prefix}{random.choice(prefixes)} {random.choice(base_names)}"
         else:
-            name = f"{random.choice(base_names)}"
+            name = f"{name_prefix}{random.choice(base_names)}"
         
         mob_class = random.choice(["Aberrant", "Hollow", "Corrupted", "Phantom"])
+        
+        # Add chaos mode corruption
+        if self.chaos_mode_active and random.random() < 0.3:
+            name = f"Chaos {name}"
+            special_abilities.append("chaos_corruption")
         
         return {
             "name": name,
             "class": mob_class,
-            "stats": stats
+            "stats": stats,
+            "special_abilities": special_abilities,
+            "entity_bias": self.calculate_entity_bias(player_vector)
         }
     
     def generate_item(self, player_vector: List[float], floor: int) -> Dict[str, Any]:

@@ -11,11 +11,16 @@ A revolutionary terminal-based roguelike that uses **real-time AI** to create pe
 **Terminal Souls** transcends traditional roguelikes through AI orchestration:
 
 * **🧠 Real-Time EntityAI:** PyTorch MLPs generate adaptive content that counters your playstyle in real-time
+* **⚔️ Turn-Based Combat:** See enemy actions first, then respond strategically—no rigid timers
+* **🎲 AI Chapter Blueprints:** Every run has a unique 9-chapter sequence that changes on death
 * **📊 Psychological Profiling:** Hidden sanity and predictability systems track your mental state and patterns  
 * **📝 Dynamic Lore System:** AI mutates the game bible mid-run for meta-gaslighting effects
 * **🎭 Adaptive Narrator:** All text filtered through the Entity's voice based on your psychological profile
 * **💀 UI Corruption:** High predictability triggers phantom inputs, delayed responses, and visual glitches
 * **🕸️ Relationship Webs:** NPCs form dynamic alliances that respond to your betrayals across social networks
+* **🏰 Safe vs Hostile Zones:** Type 'exit' in safe areas or face the Entity's denial in hostile zones
+* **📈 Souls-Like Scaling:** Stat costs increase quadratically with Entity adaptation warnings
+* **🌀 Chaos Mode:** 10+ deaths corrupt 20% of AI outputs—reality becomes unstable
 * **🎯 Multiple AI-Driven Endings:** Your psychological profile determines one of 6+ unique conclusions
 
 ---
@@ -44,7 +49,21 @@ pip install -r requirements.txt
 
 # Begin compilation
 python game.py
+
+# At startup, type 'help' for comprehensive tutorial
+# Or type 'exit' in safe areas to end gracefully
 ```
+
+### 📚 Comprehensive Tutorial System
+Terminal Souls includes a complete survival guide accessible by typing `help` at startup:
+- **Game Flow**: Chapter structure and safe vs hostile zones
+- **Turn-Based Combat**: Strategic combat mechanics and effectiveness ratings  
+- **Stats & Leveling**: Souls-like scaling with Entity adaptation warnings
+- **Inventory & Equipment**: Two-tab system with equipment visualization
+- **NPCs & Dialogue**: Branching conversations and relationship webs
+- **The Entity's Adaptive AI**: How the AI learns and counters your patterns
+- **Death & Progression**: What happens when you die and how to persist
+- **Advanced Tips**: Meta-strategies for mastering the Entity
 
 ### System Requirements
 - **Python 3.8+** 

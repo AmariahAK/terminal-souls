@@ -9,54 +9,426 @@ from utils import (
 )
 
 class Combat:
-    """AI-enhanced combat system with adaptive patterns"""
+    """Turn-based AI-enhanced combat system"""
     
     def __init__(self, entity_ai):
         self.entity_ai = entity_ai
         self.current_enemy = None
         self.combat_round = 0
         self.player_patterns = []
+        self.boss_phase = 1
+        self.enemy_next_actions = []  # Show enemy actions first in turn-based
         
     def start_encounter(self, player, enemy: Dict[str, Any]) -> str:
-        """Start combat encounter with AI-driven enemy"""
+        """Start turn-based combat encounter"""
         self.current_enemy = enemy
         self.combat_round = 0
         self.player_patterns = []
+        self.enemy_next_actions = []
         
         enemy_health = enemy["stats"]["vit"] * 10
         enemy_max_health = enemy_health
         
-        print(f"\n{colorize_text('═══ COMBAT INITIATED ═══', 'red')}")
-        print(f"{colorize_text(enemy['name'], 'red')} ({enemy['class']})")
-        print(f"Health: {enemy_health}/{enemy_max_health}")
+        # Check if this is a boss fight
+        is_boss = "boss" in enemy.get("class", "").lower() or enemy.get("health", 0) > 100
+        
+        print(f"\n{colorize_text('═══ TURN-BASED COMBAT ═══', 'red')}")
+        print(f"{colorize_text(enemy['name'], 'red')} ({enemy.get('class', 'Enemy')})")
+        print(f"Health: {colorize_text(f'{enemy_health}/{enemy_max_health}', 'red')}")
+        
+        if is_boss:
+            print(f"\n{colorize_text('BOSS ENCOUNTER DETECTED', 'yellow')}")
+            self.show_boss_phases(enemy)
+        
+        # Pre-generate enemy actions for transparency 
+        self.generate_enemy_action_preview(player, enemy)
+        
+        press_enter_to_continue("Press Enter to begin combat...")
         
         while enemy_health > 0 and player.health > 0:
             self.combat_round += 1
             
-            # Player action phase
-            player_action = self.get_combat_action(player)
+            print(f"\n{colorize_text(f'═══ ROUND {self.combat_round} ═══', 'cyan')}")
+            
+            # TURN-BASED: Show enemy's planned action first
+            enemy_action_preview = self.show_enemy_action_preview(player, enemy)
+            
+            # Get player response to enemy action
+            player_action = self.get_turn_based_action(player, enemy_action_preview)
+            
             if player_action == "flee":
-                player.flee_encounter()
-                return "fled"
+                if self.attempt_flee(player, enemy, is_boss):
+                    return "fled"
+                else:
+                    player_action = "stunned"  # Failed flee becomes stun
             
-            # Process player action
-            player_damage = self.process_player_action(player, player_action, enemy)
-            enemy_health -= player_damage
+            # Execute turn sequence
+            turn_result = self.execute_turn_sequence(player, enemy, player_action, enemy_health, enemy_max_health)
             
-            if enemy_health <= 0:
+            if turn_result["status"] == "victory":
                 return "victory"
-            
-            # Enemy action phase with AI patterns
-            enemy_damage = self.process_enemy_action(player, enemy)
-            player.take_damage(enemy_damage)
-            
-            if player.health <= 0:
+            elif turn_result["status"] == "defeat":
                 return "defeat"
+            elif turn_result["status"] == "fled":
+                return "fled"
+                
+            enemy_health = turn_result["enemy_health"]
             
-            # Show combat status
-            self.show_combat_status(player, enemy, enemy_health, enemy_max_health)
+            # Check for boss phase transitions
+            if is_boss:
+                phase_change = self.check_boss_phase_transition(enemy, enemy_health, enemy_max_health)
+                if phase_change:
+                    self.boss_phase = phase_change["new_phase"]
+                    print(f"\n{colorize_text(phase_change['message'], 'red')}")
+                    # Regenerate action preview for new phase
+                    self.generate_enemy_action_preview(player, enemy)
+            
+            # Brief pause between rounds
+            press_enter_to_continue("Press Enter to continue...")
             
         return "victory" if enemy_health <= 0 else "defeat"
+    
+    def show_boss_phases(self, enemy: Dict[str, Any]):
+        """Show boss phases at start of encounter"""
+        phase_descriptions = {
+            1: "Phase 1: The entity tests your resolve",
+            2: "Phase 2: Aggression increases, new abilities unlock", 
+            3: "Phase 3: Desperation - final gambit unleashed"
+        }
+        
+        print(f"{colorize_text('Boss Phases:', 'yellow')}")
+        for phase, desc in phase_descriptions.items():
+            print(f"  {colorize_text(f'{phase}.', 'yellow')} {desc}")
+    
+    def generate_enemy_action_preview(self, player, enemy: Dict[str, Any]):
+        """Pre-generate enemy actions for transparency"""
+        # Generate 3 potential actions for this round
+        patterns = self.get_adaptive_enemy_pattern(player.state_vector(), enemy)
+        self.enemy_next_actions = []
+        
+        for _ in range(3):
+            action = self.select_enemy_action(patterns, player)
+            action_desc = self.get_action_description(action, enemy)
+            self.enemy_next_actions.append({
+                "action": action,
+                "description": action_desc,
+                "threat_level": self.calculate_threat_level(action, enemy)
+            })
+    
+    def show_enemy_action_preview(self, player, enemy: Dict[str, Any]) -> Dict[str, Any]:
+        """Show what the enemy is planning to do"""
+        if not self.enemy_next_actions:
+            self.generate_enemy_action_preview(player, enemy)
+        
+        print(f"\n{colorize_text('Enemy Action Preview:', 'red')}")
+        print(f"{colorize_text(enemy['name'], 'red')} prepares to:")
+        
+        selected_action = random.choice(self.enemy_next_actions)
+        
+        # Show the action with threat level
+        threat_color = "red" if selected_action["threat_level"] > 7 else "yellow" if selected_action["threat_level"] > 4 else "green"
+        
+        print(f"  {colorize_text('→', 'red')} {selected_action['description']}")
+        threat_level = selected_action["threat_level"]
+        print(f"  Threat Level: {colorize_text(f'{threat_level}/10', threat_color)}")
+        
+        # Show special ability warnings
+        if enemy.get("special_abilities", []):
+            abilities = enemy["special_abilities"]
+            if any(ability in abilities for ability in ["armor_plating", "feint_attack", "pattern_prediction"]):
+                print(f"  {colorize_text('⚠️  Special abilities detected', 'warning')}")
+        
+        return selected_action
+    
+    def get_turn_based_action(self, player, enemy_action_preview: Dict[str, Any]) -> str:
+        """Get player action in response to enemy preview"""
+        print(f"\n{colorize_text('Your Response Options:', 'cyan')}")
+        
+        options = [
+            ("a", "Attack", "Deal damage to the enemy"),
+            ("d", "Dodge", "Avoid the enemy's attack"),
+            ("h", "Heal", "Restore health using Ashlight"),
+            ("s", "Special", "Use class ability or skill"),
+            ("f", "Flee", "Attempt to escape combat")
+        ]
+        
+        for key, name, desc in options:
+            effectiveness = self.calculate_action_effectiveness(key, enemy_action_preview)
+            effectiveness_text = self.get_effectiveness_text(effectiveness)
+            print(f"  {colorize_text(key.upper(), 'cyan')} - {colorize_text(name, 'white')}: {desc}")
+            print(f"      Effectiveness vs enemy action: {effectiveness_text}")
+        
+        print(f"\n{colorize_text('Choose your response (a/d/h/s/f):', 'white')}")
+        
+        while True:
+            try:
+                choice = input().strip().lower()
+                if choice in ['a', 'd', 'h', 's', 'f']:
+                    return choice
+                else:
+                    print(f"{colorize_text('Invalid choice. Use a/d/h/s/f', 'red')}")
+            except (KeyboardInterrupt, EOFError):
+                return "f"  # Default to flee on interrupt
+    
+    def calculate_action_effectiveness(self, player_action: str, enemy_action: Dict[str, Any]) -> int:
+        """Calculate how effective player action is against enemy action"""
+        action_counters = {
+            "a": {"counter_attack": 2, "feint": 3, "strike": 6},  # Attack counters vary
+            "d": {"area_attack": 2, "feint": 8, "strike": 9},    # Dodge good vs most
+            "h": {"interrupt": 3, "pressure": 4, "strike": 7},   # Heal best when safe
+            "s": {"magic_attack": 8, "counter_attack": 6, "strike": 7},  # Special mixed
+            "f": {"all": 5}  # Flee is always moderate
+        }
+        
+        enemy_action_type = enemy_action.get("action", "strike")
+        player_counters = action_counters.get(player_action, {})
+        
+        return player_counters.get(enemy_action_type, player_counters.get("all", 5))
+    
+    def get_effectiveness_text(self, effectiveness: int) -> str:
+        """Convert effectiveness number to descriptive text"""
+        if effectiveness >= 8:
+            return colorize_text("Excellent", "green")
+        elif effectiveness >= 6:
+            return colorize_text("Good", "yellow")
+        elif effectiveness >= 4:
+            return colorize_text("Fair", "white")
+        else:
+            return colorize_text("Poor", "red")
+    
+    def get_action_description(self, action: str, enemy: Dict[str, Any]) -> str:
+        """Get descriptive text for enemy action"""
+        descriptions = {
+            "strike": "Launch a direct attack",
+            "feint": "Feint and strike at an opening", 
+            "counter_attack": "Wait for your attack, then counter",
+            "area_attack": "Sweep attack that can't be dodged",
+            "interrupt": "Interrupt your action and drain stamina",
+            "pressure": "Apply continuous pressure",
+            "phase_shift": "Phase through reality to strike",
+            "corrupt_cast": "Cast corrupted code fragments"
+        }
+        return descriptions.get(action, "Prepare mysterious action")
+    
+    def calculate_threat_level(self, action: str, enemy: Dict[str, Any]) -> int:
+        """Calculate threat level of enemy action (1-10)"""
+        threat_levels = {
+            "strike": 4,
+            "feint": 6,
+            "counter_attack": 7,
+            "area_attack": 8,
+            "interrupt": 5,
+            "pressure": 4,
+            "phase_shift": 9,
+            "corrupt_cast": 7
+        }
+        
+        base_threat = threat_levels.get(action, 5)
+        enemy_str = enemy.get("stats", {}).get("str", 5)
+        
+        # Adjust for enemy strength
+        threat_modifier = (enemy_str - 5) // 2
+        return max(1, min(10, base_threat + threat_modifier))
+    
+    def execute_turn_sequence(self, player, enemy: Dict[str, Any], player_action: str, enemy_health: int, enemy_max_health: int) -> Dict[str, Any]:
+        """Execute the turn sequence and return results"""
+        print(f"\n{colorize_text('═══ TURN EXECUTION ═══', 'yellow')}")
+        
+        # Step 1: Player acts first
+        print(f"{colorize_text('Player Action:', 'green')}")
+        player_damage = 0
+        
+        if player_action == "a":
+            player_damage = self.player_attack(player, enemy)
+        elif player_action == "d":
+            self.player_dodge(player)
+        elif player_action == "h":
+            self.player_heal(player)
+        elif player_action == "s":
+            player_damage = self.player_special_ability(player, enemy)
+        elif player_action == "stunned":
+            print(f"{colorize_text('You are stunned and cannot act!', 'red')}")
+            
+        # Apply player damage
+        enemy_health -= player_damage
+        
+        if enemy_health <= 0:
+            print(f"\n{colorize_text('Enemy defeated!', 'green')}")
+            return {"status": "victory", "enemy_health": 0}
+        
+        # Step 2: Enemy acts
+        print(f"\n{colorize_text('Enemy Action:', 'red')}")
+        if self.enemy_next_actions:
+            selected_action = self.enemy_next_actions[0]  # Use first planned action
+            enemy_damage = self.execute_enemy_action(selected_action["action"], player, enemy)
+        else:
+            enemy_damage = self.process_enemy_action(player, enemy)  # Fallback
+            
+        # CRITICAL FIX: Actually apply the damage to the player
+        if enemy_damage > 0:
+            player.take_damage(enemy_damage)
+            
+        if player.health <= 0:
+            print(f"\n{colorize_text('You have been defeated!', 'red')}")
+            return {"status": "defeat", "enemy_health": enemy_health}
+        
+        # Step 3: Show turn results
+        print(f"\n{colorize_text('Turn Results:', 'cyan')}")
+        print(f"Player: {colorize_text(f'{player.health}/{player.max_health}', 'green')} HP, {colorize_text(f'{player.stamina}/{player.max_stamina}', 'yellow')} Stamina")
+        print(f"Enemy: {colorize_text(f'{enemy_health}/{enemy_max_health}', 'red')} HP")
+        
+        return {"status": "continue", "enemy_health": enemy_health}
+    
+    def attempt_flee(self, player, enemy: Dict[str, Any], is_boss: bool) -> bool:
+        """Attempt to flee from combat"""
+        if is_boss:
+            # Bosses usually don't allow fleeing, but EntityAI might
+            entity_bias = self.entity_ai.calculate_entity_bias(player.state_vector())
+            flee_allowed = entity_bias < 0.2  # Only if Entity bias is very low
+            
+            if flee_allowed:
+                print(f"{colorize_text('The Entity allows your escape... this time.', 'yellow')}")
+                player.flee_encounter()
+                return True
+            else:
+                print(f"{colorize_text('The Entity blocks your escape! No fleeing from judgment!', 'red')}")
+                return False
+        else:
+            # Regular enemies: standard flee chance
+            flee_chance = 0.7 + (player.stats["dex"] / 20.0) * 0.2  # 70-90% based on DEX
+            
+            if random.random() < flee_chance:
+                print(f"{colorize_text('You successfully escape!', 'green')}")
+                player.flee_encounter()
+                return True
+            else:
+                print(f"{colorize_text('Escape failed! You are trapped in combat!', 'red')}")
+                return False
+    
+    def check_boss_phase_transition(self, enemy: Dict[str, Any], current_health: int, max_health: int) -> Optional[Dict[str, Any]]:
+        """Check if boss should transition phases"""
+        health_percent = current_health / max_health
+        
+        if self.boss_phase == 1 and health_percent <= 0.75:
+            return {
+                "new_phase": 2,
+                "message": "═══ PHASE TWO BEGINS ═══\nThe entity's mask cracks—aggression increases!"
+            }
+        elif self.boss_phase == 2 and health_percent <= 0.35:
+            return {
+                "new_phase": 3, 
+                "message": "═══ FINAL PHASE ═══\nDesperation unleashes the entity's true power!"
+            }
+        
+        return None
+    
+    def player_special_ability(self, player, enemy: Dict[str, Any]) -> int:
+        """Execute player's class-specific special ability"""
+        if player.player_class == "Warrior":
+            return self.warrior_special(player, enemy)
+        elif player.player_class == "Rogue":
+            return self.rogue_special(player, enemy)
+        elif player.player_class == "Sorcerer":
+            return self.sorcerer_special(player, enemy)
+        elif player.player_class == "Cleric":
+            return self.cleric_special(player, enemy)
+        elif player.player_class == "Knight":
+            return self.knight_special(player, enemy)
+        elif player.player_class == "Hollow":
+            return self.hollow_special(player, enemy)
+        else:
+            print(f"{colorize_text('No special ability available', 'yellow')}")
+            return 0
+    
+    def warrior_special(self, player, enemy: Dict[str, Any]) -> int:
+        """Warrior: Berserker Rage - high damage, lose defense"""
+        if player.stamina < 5:
+            print(f"{colorize_text('Not enough stamina for Berserker Rage!', 'red')}")
+            return 0
+            
+        player.stamina -= 5
+        damage = player.stats["str"] * 2 + random.randint(10, 20)
+        print(f"{colorize_text('BERSERKER RAGE! Devastating attack!', 'red')}")
+        print(f"{colorize_text(f'Dealt {damage} damage but lost defense!', 'red')}")
+        
+        # Temporary defense loss (would need to track this)
+        return damage
+    
+    def rogue_special(self, player, enemy: Dict[str, Any]) -> int:
+        """Rogue: Shadow Strike - guaranteed critical hit"""
+        if player.stamina < 4:
+            print(f"{colorize_text('Not enough stamina for Shadow Strike!', 'red')}")
+            return 0
+            
+        player.stamina -= 4
+        damage = (player.stats["str"] + player.stats["dex"]) * 2
+        print(f"{colorize_text('SHADOW STRIKE! Critical hit from stealth!', 'cyan')}")
+        print(f"{colorize_text(f'Dealt {damage} critical damage!', 'green')}")
+        return damage
+    
+    def sorcerer_special(self, player, enemy: Dict[str, Any]) -> int:
+        """Sorcerer: Code Burst - magic damage, chance to stun"""
+        if player.stamina < 6:
+            print(f"{colorize_text('Not enough stamina for Code Burst!', 'red')}")
+            return 0
+            
+        player.stamina -= 6
+        damage = player.stats["int"] * 2 + random.randint(15, 25)
+        print(f"{colorize_text('CODE BURST! Reality tears with digital lightning!', 'cyan')}")
+        print(f"{colorize_text(f'Dealt {damage} magic damage!', 'cyan')}")
+        
+        if random.random() < 0.3:
+            print(f"{colorize_text('Enemy is stunned by the digital assault!', 'green')}")
+            # Would need to track stun effect
+            
+        return damage
+    
+    def cleric_special(self, player, enemy: Dict[str, Any]) -> int:
+        """Cleric: Divine Wrath - damage + healing"""
+        if player.stamina < 5:
+            print(f"{colorize_text('Not enough stamina for Divine Wrath!', 'red')}")
+            return 0
+            
+        player.stamina -= 5
+        damage = player.stats["fth"] + random.randint(8, 15)
+        heal_amount = player.stats["fth"] + 5
+        
+        player.heal(heal_amount)
+        print(f"{colorize_text('DIVINE WRATH! Holy light burns the enemy!', 'yellow')}")
+        print(f"{colorize_text(f'Dealt {damage} holy damage and healed {heal_amount} HP!', 'green')}")
+        return damage
+    
+    def knight_special(self, player, enemy: Dict[str, Any]) -> int:
+        """Knight: Shield Wall - massive defense boost, counter damage"""
+        if player.stamina < 4:
+            print(f"{colorize_text('Not enough stamina for Shield Wall!', 'red')}")
+            return 0
+            
+        player.stamina -= 4
+        print(f"{colorize_text('SHIELD WALL! Prepared for the next attack!', 'green')}")
+        print(f"{colorize_text('Next enemy attack will be heavily reduced and reflected!', 'yellow')}")
+        
+        # Would need to set a temporary effect flag
+        player.shield_wall_active = True
+        return 0  # No direct damage
+    
+    def hollow_special(self, player, enemy: Dict[str, Any]) -> int:
+        """Hollow: Soul Drain - steal health and stamina"""
+        if player.stamina < 3:
+            print(f"{colorize_text('Not enough stamina for Soul Drain!', 'red')}")
+            return 0
+            
+        player.stamina -= 3
+        damage = random.randint(5, 12)
+        stolen_stamina = damage // 2
+        stolen_health = damage // 3
+        
+        player.stamina = min(player.max_stamina, player.stamina + stolen_stamina)
+        player.heal(stolen_health)
+        
+        print(f"{colorize_text('SOUL DRAIN! Absorbing the enemy\'s essence!', 'magenta')}")
+        print(f"{colorize_text(f'Dealt {damage} damage, gained {stolen_health} HP and {stolen_stamina} stamina!', 'green')}")
+        return damage
     
     def get_combat_action(self, player) -> str:
         """Get player combat action with UI corruption"""
