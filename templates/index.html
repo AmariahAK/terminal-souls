@@ -7,13 +7,27 @@
     <link rel="icon" type="image/png" href="/static/terminal_souls.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111014;
+            --neon-cyan: #00ffff;
+            --toxic-purple: #9d4edd;
+            --crimson-red: #dc143c;
+            --static-grey: #666669;
+            --glitch-pink: #ff10f0;
+            --electric-blue: #1e90ff;
+            --corruption-green: #39ff14;
+        }
+        
         body {
-            background: #000;
-            color: #00ff00;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--neon-cyan);
             font-family: 'Courier New', monospace;
             margin: 0;
             padding: 20px;
             overflow-x: hidden;
+            min-height: 100vh;
+            background-attachment: fixed;
         }
         
         .container {
@@ -26,23 +40,52 @@
         
         .header {
             text-align: center;
-            border: 2px solid #00ff00;
+            border: 2px solid var(--neon-cyan);
             padding: 20px;
             margin-bottom: 20px;
-            background: rgba(0, 255, 0, 0.1);
+            background: linear-gradient(45deg, rgba(0, 255, 255, 0.05), rgba(157, 78, 221, 0.1));
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--neon-cyan), var(--toxic-purple), var(--crimson-red));
+            z-index: -1;
+            border-radius: 8px;
+            animation: borderGlow 3s ease-in-out infinite alternate;
+        }
+        
+        @keyframes borderGlow {
+            0% { opacity: 0.6; }
+            100% { opacity: 1; }
         }
         
         .header h1 {
             margin: 0;
             font-size: 2.5em;
-            color: #ff0000;
-            text-shadow: 0 0 10px #ff0000;
+            color: var(--crimson-red);
+            text-shadow: 0 0 15px var(--crimson-red), 0 0 30px rgba(220, 20, 60, 0.5);
+            animation: flicker 2s infinite alternate;
+        }
+        
+        @keyframes flicker {
+            0%, 50% { opacity: 1; }
+            51%, 55% { opacity: 0.8; }
+            56%, 100% { opacity: 1; }
         }
         
         .header p {
             margin: 10px 0 0 0;
-            color: #ffff00;
+            color: var(--toxic-purple);
             font-style: italic;
+            text-shadow: 0 0 8px rgba(157, 78, 221, 0.8);
         }
         
         .game-area {
@@ -60,47 +103,58 @@
         }
         
         .entity-output {
-            background: #111;
-            border: 2px solid #ff0000;
-            border-radius: 5px;
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.1), rgba(17, 16, 20, 0.9));
+            border: 2px solid var(--crimson-red);
+            border-radius: 8px;
             padding: 15px;
             height: 300px;
             overflow-y: auto;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.4;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(220, 20, 60, 0.2), 0 0 15px rgba(220, 20, 60, 0.3);
         }
         
         .entity-output::before {
             content: "🔥 THE ENTITY SPEAKS:";
             display: block;
-            color: #ff0000;
+            color: var(--crimson-red);
             font-weight: bold;
             margin-bottom: 10px;
-            border-bottom: 1px solid #ff0000;
+            border-bottom: 1px solid var(--crimson-red);
             padding-bottom: 5px;
+            text-shadow: 0 0 10px var(--crimson-red);
+            animation: pulse 1.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes pulse {
+            0% { text-shadow: 0 0 10px var(--crimson-red); }
+            100% { text-shadow: 0 0 15px var(--crimson-red), 0 0 25px rgba(220, 20, 60, 0.8); }
         }
         
         .user-log {
-            background: #001100;
-            border: 2px solid #00ff00;
-            border-radius: 5px;
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(17, 16, 20, 0.9));
+            border: 2px solid var(--neon-cyan);
+            border-radius: 8px;
             padding: 15px;
             height: 150px;
             overflow-y: auto;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.4;
+            box-shadow: inset 0 0 20px rgba(0, 255, 255, 0.1), 0 0 10px rgba(0, 255, 255, 0.2);
         }
         
         .user-log::before {
             content: "💀 YOUR ACTIONS:";
             display: block;
-            color: #00ff00;
+            color: var(--neon-cyan);
             font-weight: bold;
             margin-bottom: 10px;
-            border-bottom: 1px solid #00ff00;
+            border-bottom: 1px solid var(--neon-cyan);
             padding-bottom: 5px;
+            text-shadow: 0 0 8px var(--neon-cyan);
         }
         
         .input-area {
@@ -110,73 +164,128 @@
         
         .input-area input {
             flex: 1;
-            background: #222;
-            border: 1px solid #555;
-            color: #00ff00;
-            padding: 10px;
+            background: linear-gradient(135deg, var(--bg-secondary), rgba(102, 102, 105, 0.1));
+            border: 2px solid var(--static-grey);
+            color: var(--neon-cyan);
+            padding: 12px;
             font-family: 'Courier New', monospace;
             font-size: 16px;
+            border-radius: 6px;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        
+        .input-area input:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4), inset 0 0 10px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(135deg, var(--bg-secondary), rgba(0, 255, 255, 0.05));
         }
         
         .input-area button {
-            background: #333;
-            border: 1px solid #555;
-            color: #00ff00;
-            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--toxic-purple), rgba(157, 78, 221, 0.8));
+            border: 2px solid var(--toxic-purple);
+            color: var(--neon-cyan);
+            padding: 12px 24px;
             cursor: pointer;
             font-family: 'Courier New', monospace;
+            font-weight: bold;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 8px rgba(0, 255, 255, 0.8);
+            box-shadow: 0 0 10px rgba(157, 78, 221, 0.4);
         }
         
         .input-area button:hover {
-            background: #555;
+            background: linear-gradient(135deg, rgba(157, 78, 221, 0.9), var(--glitch-pink));
+            box-shadow: 0 0 20px rgba(157, 78, 221, 0.6), 0 0 30px rgba(255, 16, 240, 0.3);
+            transform: translateY(-2px);
         }
         
         .input-area button:disabled {
-            background: #222;
-            color: #666;
+            background: var(--static-grey);
+            color: rgba(102, 102, 105, 0.6);
             cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+            border-color: rgba(102, 102, 105, 0.3);
         }
         
         .status {
             text-align: center;
-            padding: 10px;
-            color: #ffff00;
+            padding: 12px;
+            color: var(--toxic-purple);
+            font-weight: bold;
+            text-shadow: 0 0 8px rgba(157, 78, 221, 0.6);
+            background: linear-gradient(90deg, transparent, rgba(157, 78, 221, 0.1), transparent);
+            border-radius: 6px;
         }
         
         .warning {
-            color: #ff6600;
+            color: var(--glitch-pink);
             text-align: center;
-            margin: 10px 0;
-            padding: 10px;
-            border: 1px solid #ff6600;
-            background: rgba(255, 102, 0, 0.1);
+            margin: 15px 0;
+            padding: 15px;
+            border: 2px solid var(--glitch-pink);
+            background: linear-gradient(135deg, rgba(255, 16, 240, 0.1), rgba(220, 20, 60, 0.05));
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            animation: warningPulse 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes warningPulse {
+            0% { box-shadow: 0 0 10px rgba(255, 16, 240, 0.3); }
+            100% { box-shadow: 0 0 20px rgba(255, 16, 240, 0.6), inset 0 0 15px rgba(255, 16, 240, 0.1); }
+        }
+        
+        .warning::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: scan 3s infinite;
+        }
+        
+        @keyframes scan {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
         
         .footer {
             text-align: center;
-            margin-top: 20px;
-            padding: 10px;
-            border-top: 1px solid #333;
-            color: #888;
+            margin-top: 25px;
+            padding: 15px;
+            border-top: 2px solid var(--static-grey);
+            color: var(--static-grey);
+            background: linear-gradient(135deg, rgba(102, 102, 105, 0.05), rgba(17, 16, 20, 0.1));
+            border-radius: 8px;
         }
         
         .footer a {
-            color: #00ffff;
+            color: var(--electric-blue);
             text-decoration: none;
+            text-shadow: 0 0 8px rgba(30, 144, 255, 0.6);
+            transition: all 0.3s ease;
         }
         
         .footer a:hover {
+            color: var(--neon-cyan);
+            text-shadow: 0 0 12px var(--neon-cyan);
             text-decoration: underline;
         }
         
-        /* ANSI color simulation */
-        .ansi-red { color: #ff5555; }
-        .ansi-green { color: #55ff55; }
-        .ansi-yellow { color: #ffff55; }
-        .ansi-blue { color: #5555ff; }
-        .ansi-magenta { color: #ff55ff; }
-        .ansi-cyan { color: #55ffff; }
-        .ansi-white { color: #ffffff; }
+        /* ANSI color simulation with cyberpunk theme */
+        .ansi-red { color: var(--crimson-red); text-shadow: 0 0 8px var(--crimson-red); }
+        .ansi-green { color: var(--corruption-green); text-shadow: 0 0 8px var(--corruption-green); }
+        .ansi-yellow { color: var(--glitch-pink); text-shadow: 0 0 8px var(--glitch-pink); }
+        .ansi-blue { color: var(--electric-blue); text-shadow: 0 0 8px var(--electric-blue); }
+        .ansi-magenta { color: var(--toxic-purple); text-shadow: 0 0 8px var(--toxic-purple); }
+        .ansi-cyan { color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan); }
+        .ansi-white { color: #ffffff; text-shadow: 0 0 5px rgba(255, 255, 255, 0.7); }
         
         @media (max-width: 768px) {
             .container {
@@ -211,12 +320,12 @@
         <div class="game-area">
             <div class="output-container">
                 <div id="entityOutput" class="entity-output">
-                    <div style="color: #00ffff; text-align: center;">
+                    <div style="color: var(--neon-cyan); text-align: center; text-shadow: 0 0 10px var(--neon-cyan);">
                         Welcome to Terminal Souls<br>
                         Click "Start Game" to begin your descent into the Entity's embrace...<br><br>
                         
-                        <span style="color: #ffff00;">
-                        ✨ Features:<br>
+                        <span style="color: var(--toxic-purple); text-shadow: 0 0 8px var(--toxic-purple);">
+                        ⚡ Features:<br>
                         • Turn-based combat with AI adaptation<br>
                         • 9-chapter blueprint system per Book<br>
                         • Souls-like stat scaling with Entity counters<br>
@@ -227,7 +336,7 @@
                 </div>
                 
                 <div id="userLog" class="user-log">
-                    <div style="color: #888; font-style: italic;">
+                    <div style="color: var(--static-grey); font-style: italic;">
                         Your commands and actions will appear here...
                     </div>
                 </div>
@@ -269,8 +378,8 @@
         // Socket event handlers
         socket.on('game_started', function(data) {
             gameActive = true;
-            entityOutput.innerHTML = '<div style="color: #ff6600;">The Entity awakens... Initializing your doom...</div>';
-            userLog.innerHTML = '<div style="color: #888; font-style: italic;">Game started - type your first command...</div>';
+            entityOutput.innerHTML = '<div style="color: var(--crimson-red); text-shadow: 0 0 12px var(--crimson-red); animation: pulse 1s infinite alternate;">🔥 The Entity awakens... Initializing your doom...</div>';
+            userLog.innerHTML = '<div style="color: var(--static-grey); font-style: italic;">Game started - type your first command...</div>';
             updateStatus('Game started - The Entity awakens...');
             enableInput();
             startBtn.disabled = true;
@@ -354,7 +463,7 @@
         
         function appendUserLog(text) {
             const timestamp = new Date().toLocaleTimeString();
-            userLog.innerHTML += `<span style="color: #666;">[${timestamp}]</span> ${text}<br>`;
+            userLog.innerHTML += `<span style="color: var(--static-grey);">[${timestamp}]</span> <span style="color: var(--neon-cyan); text-shadow: 0 0 5px var(--neon-cyan);">${text}</span><br>`;
             userLog.scrollTop = userLog.scrollHeight;
         }
         
