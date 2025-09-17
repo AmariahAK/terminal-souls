@@ -3,6 +3,14 @@
 Terminal Souls Web Interface for Render deployment
 """
 
+# CRITICAL: eventlet.monkey_patch() MUST be called before any other imports
+import eventlet
+eventlet.monkey_patch()
+
+# Suppress torch warnings that conflict with eventlet
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
+
 import os
 import asyncio
 from flask import Flask, render_template, request, jsonify, session
@@ -27,8 +35,9 @@ active_games = {}
 class WebGameInterface:
     """Interface to run Terminal Souls in web environment"""
     
-    def __init__(self, session_id):
+    def __init__(self, session_id, app_instance):
         self.session_id = session_id
+        self.app = app_instance
         self.game = Game()
         self.input_queue = queue.Queue()
         self.output_buffer = []
@@ -43,12 +52,14 @@ class WebGameInterface:
         if self.output_buffer:
             output = '\n'.join(self.output_buffer)
             self.output_buffer = []
-            socketio.emit('game_output', {'text': output}, room=self.session_id)
+            with self.app.app_context():
+                socketio.emit('game_output', {'text': output}, room=self.session_id)
     
     def get_input(self, prompt=""):
         """Get input from web client"""
         self.waiting_for_input = True
-        socketio.emit('request_input', {'prompt': prompt}, room=self.session_id)
+        with self.app.app_context():
+            socketio.emit('request_input', {'prompt': prompt}, room=self.session_id)
         
         # Wait for input from client
         try:
@@ -76,7 +87,8 @@ class WebGameInterface:
                 self.send_output()
             result = self.get_input()
             # Clear processing state after receiving input
-            socketio.emit('clear_processing', room=self.session_id)
+            with self.app.app_context():
+                socketio.emit('clear_processing', room=self.session_id)
             return result
         
         def web_print(*args, **kwargs):
@@ -124,7 +136,8 @@ class WebGameInterface:
             
             # Send final output
             self.send_output()
-            socketio.emit('game_ended', room=self.session_id)
+            with self.app.app_context():
+                socketio.emit('game_ended', room=self.session_id)
 
 @app.route('/')
 def index():
@@ -138,7 +151,7 @@ def handle_start_game():
     session['game_id'] = session_id
     
     # Create new game interface
-    game_interface = WebGameInterface(session_id)
+    game_interface = WebGameInterface(session_id, app)
     active_games[session_id] = game_interface
     
     # Start game in background thread
@@ -146,7 +159,8 @@ def handle_start_game():
         try:
             game_interface.run_game()
         except Exception as e:
-            socketio.emit('game_error', {'error': str(e)}, room=session_id)
+            with app.app_context():
+                socketio.emit('game_error', {'error': str(e)}, room=session_id)
         finally:
             # Clean up session
             if session_id in active_games:
