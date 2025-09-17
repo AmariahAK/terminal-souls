@@ -49,18 +49,58 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            gap: 10px;
         }
         
-        .output {
+        .output-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1;
+        }
+        
+        .entity-output {
             background: #111;
-            border: 1px solid #333;
+            border: 2px solid #ff0000;
+            border-radius: 5px;
             padding: 15px;
-            height: 400px;
+            height: 300px;
             overflow-y: auto;
-            margin-bottom: 10px;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.4;
+        }
+        
+        .entity-output::before {
+            content: "🔥 THE ENTITY SPEAKS:";
+            display: block;
+            color: #ff0000;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ff0000;
+            padding-bottom: 5px;
+        }
+        
+        .user-log {
+            background: #001100;
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            padding: 15px;
+            height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .user-log::before {
+            content: "💀 YOUR ACTIONS:";
+            display: block;
+            color: #00ff00;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 5px;
         }
         
         .input-area {
@@ -169,19 +209,27 @@
         </div>
         
         <div class="game-area">
-            <div id="output" class="output">
-                <div style="color: #00ffff; text-align: center;">
-                    Welcome to Terminal Souls<br>
-                    Click "Start Game" to begin your descent into the Entity's embrace...<br><br>
-                    
-                    <span style="color: #ffff00;">
-                    ✨ Features:<br>
-                    • Turn-based combat with AI adaptation<br>
-                    • 9-chapter blueprint system per Book<br>
-                    • Souls-like stat scaling with Entity counters<br>
-                    • Comprehensive help system (type 'help' at start)<br>
-                    • Safe vs hostile zone mechanics<br>
-                    </span>
+            <div class="output-container">
+                <div id="entityOutput" class="entity-output">
+                    <div style="color: #00ffff; text-align: center;">
+                        Welcome to Terminal Souls<br>
+                        Click "Start Game" to begin your descent into the Entity's embrace...<br><br>
+                        
+                        <span style="color: #ffff00;">
+                        ✨ Features:<br>
+                        • Turn-based combat with AI adaptation<br>
+                        • 9-chapter blueprint system per Book<br>
+                        • Souls-like stat scaling with Entity counters<br>
+                        • Comprehensive help system (type 'help' at start)<br>
+                        • Safe vs hostile zone mechanics<br>
+                        </span>
+                    </div>
+                </div>
+                
+                <div id="userLog" class="user-log">
+                    <div style="color: #888; font-style: italic;">
+                        Your commands and actions will appear here...
+                    </div>
                 </div>
             </div>
             
@@ -211,7 +259,8 @@
         let gameActive = false;
         
         // DOM elements
-        const output = document.getElementById('output');
+        const entityOutput = document.getElementById('entityOutput');
+        const userLog = document.getElementById('userLog');
         const input = document.getElementById('gameInput');
         const sendBtn = document.getElementById('sendBtn');
         const startBtn = document.getElementById('startBtn');
@@ -220,7 +269,8 @@
         // Socket event handlers
         socket.on('game_started', function(data) {
             gameActive = true;
-            output.innerHTML = '';
+            entityOutput.innerHTML = '<div style="color: #ff6600;">The Entity awakens... Initializing your doom...</div>';
+            userLog.innerHTML = '<div style="color: #888; font-style: italic;">Game started - type your first command...</div>';
             updateStatus('Game started - The Entity awakens...');
             enableInput();
             startBtn.disabled = true;
@@ -228,13 +278,13 @@
         });
         
         socket.on('game_output', function(data) {
-            appendOutput(data.text);
+            appendEntityOutput(data.text);
         });
         
         socket.on('request_input', function(data) {
             updateStatus('Waiting for your input...');
             if (data.prompt) {
-                appendOutput(data.prompt);
+                appendEntityOutput(data.prompt);
             }
             input.focus();
         });
@@ -246,13 +296,14 @@
         socket.on('game_ended', function() {
             gameActive = false;
             updateStatus('Game ended - The Entity sleeps...');
+            appendEntityOutput('\n🔥 The Entity releases your soul... for now.');
             disableInput();
             startBtn.disabled = false;
             startBtn.textContent = 'Start New Game';
         });
         
         socket.on('game_error', function(data) {
-            appendOutput(`\n❌ ERROR: ${data.error}\nThe code bleeds. The Entity laughs.`);
+            appendEntityOutput(`\n❌ ERROR: ${data.error}\nThe code bleeds. The Entity laughs.`);
             updateStatus('Game error occurred');
             disableInput();
             startBtn.disabled = false;
@@ -271,8 +322,8 @@
             if (gameActive && input.value.trim()) {
                 const userInput = input.value.trim();
                 
-                // Show user input in output
-                appendOutput(`> ${userInput}`);
+                // Show user input in user log
+                appendUserLog(`> ${userInput}`);
                 
                 // Send to game
                 socket.emit('send_input', {input: userInput});
@@ -284,7 +335,7 @@
             }
         }
         
-        function appendOutput(text) {
+        function appendEntityOutput(text) {
             // Simple ANSI color conversion
             let processedText = text
                 .replace(/\x1b\[31m/g, '<span class="ansi-red">')
@@ -297,8 +348,14 @@
                 .replace(/\x1b\[0m/g, '</span>')
                 .replace(/\x1b\[[0-9;]*m/g, ''); // Remove other ANSI codes
             
-            output.innerHTML += processedText + '<br>';
-            output.scrollTop = output.scrollHeight;
+            entityOutput.innerHTML += processedText + '<br>';
+            entityOutput.scrollTop = entityOutput.scrollHeight;
+        }
+        
+        function appendUserLog(text) {
+            const timestamp = new Date().toLocaleTimeString();
+            userLog.innerHTML += `<span style="color: #666;">[${timestamp}]</span> ${text}<br>`;
+            userLog.scrollTop = userLog.scrollHeight;
         }
         
         function updateStatus(text) {

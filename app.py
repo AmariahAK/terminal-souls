@@ -61,12 +61,16 @@ class WebGameInterface:
     
     def run_game(self):
         """Run the game with web interface"""
+        import sys
+        
         # Monkey patch input and print for web
         original_input = __builtins__['input']
         original_print = __builtins__['print']
+        original_stdout = sys.stdout
         
         def web_input(prompt=""):
-            self.send_output()  # Send any pending output first
+            # Send any pending output first
+            self.send_output()  
             if prompt:
                 self.capture_print(prompt)
                 self.send_output()
@@ -76,6 +80,7 @@ class WebGameInterface:
             return result
         
         def web_print(*args, **kwargs):
+            # Capture the print output
             output = StringIO()
             print(*args, file=output, **kwargs)
             content = output.getvalue().rstrip('\n')
@@ -84,12 +89,28 @@ class WebGameInterface:
                 # Send output immediately for real-time display
                 self.send_output()
         
+        # Custom stdout to capture any direct writes
+        class WebStdout:
+            def __init__(self, interface):
+                self.interface = interface
+                
+            def write(self, text):
+                if text.strip():  # Only capture non-empty content
+                    self.interface.capture_print(text.rstrip('\n'))
+                    self.interface.send_output()
+                return len(text)
+                
+            def flush(self):
+                pass
+        
         try:
+            # Replace both print and stdout
             __builtins__['input'] = web_input
             __builtins__['print'] = web_print
+            sys.stdout = WebStdout(self)
             
             # Send initial game output
-            self.capture_print("Initializing Terminal Souls...")
+            self.capture_print("🔥 The Entity stirs... Compiling your doom...")
             self.send_output()
             
             # Run the game
@@ -99,6 +120,7 @@ class WebGameInterface:
             # Restore original functions
             __builtins__['input'] = original_input
             __builtins__['print'] = original_print
+            sys.stdout = original_stdout
             
             # Send final output
             self.send_output()
