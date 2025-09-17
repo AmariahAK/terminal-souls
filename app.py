@@ -136,7 +136,9 @@ class WebGameInterface:
         def web_print(*args, **kwargs):
             # Capture the print output
             output = StringIO()
-            print(*args, file=output, **kwargs)
+            # Remove 'file' from kwargs if it exists to avoid conflict
+            clean_kwargs = {k: v for k, v in kwargs.items() if k != 'file'}
+            print(*args, file=output, **clean_kwargs)
             content = output.getvalue().rstrip('\n')
             if content:  # Only capture non-empty content
                 self.capture_print(content)

@@ -1864,8 +1864,12 @@ class Game:
         except KeyboardInterrupt:
             print(f"\n\n{colorize_text('The Entity releases you... for now.', context='whisper')}")
         except Exception as e:
-            print(f"\n{colorize_text(f'ERROR: {str(e)}', 'red')}")
-            print(f"{colorize_text('The code bleeds. The Entity laughs.', context='whisper')}")
+            # Import sys to write directly to stderr to avoid recursive print issues
+            import sys
+            sys.stderr.write(f"Game error: {str(e)}\n")
+            sys.stderr.flush()
+            # Re-raise the exception so the web interface can handle it
+            raise
         finally:
             # Cleanup
             if hasattr(self, 'entity_ai'):
