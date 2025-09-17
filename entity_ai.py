@@ -50,7 +50,7 @@ class EntityAI:
                 _ = model(dummy_input)
         
         # Game bible for mutable lore
-        self.bible_path = "/Users/amariah/Documents/GitHub/terminal-souls/game_bible.json"
+        self.bible_path = os.path.join(os.path.dirname(__file__), "game_bible.json")
         self.load_game_bible()
         
         # Entity whisper system
