@@ -23,11 +23,29 @@ from io import StringIO
 import contextlib
 
 # Import the game
-from game import Game
+try:
+    from game import Game
+    print("[DEBUG] Successfully imported Game class")
+except Exception as e:
+    print(f"[ERROR] Failed to import Game: {e}")
+    import traceback
+    traceback.print_exc()
+    raise
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'terminal-souls-secret-key')
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Configure for production
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
+
+# Initialize SocketIO with proper configuration for Render
+socketio = SocketIO(app, 
+                   cors_allowed_origins="*",
+                   logger=True,
+                   engineio_logger=True,
+                   async_mode='eventlet',
+                   ping_timeout=60,
+                   ping_interval=25)
 
 # Store active game sessions
 active_games = {}
@@ -36,12 +54,22 @@ class WebGameInterface:
     """Interface to run Terminal Souls in web environment"""
     
     def __init__(self, session_id, app_instance):
-        self.session_id = session_id
-        self.app = app_instance
-        self.game = Game()
-        self.input_queue = queue.Queue()
-        self.output_buffer = []
-        self.waiting_for_input = False
+        try:
+            print(f"[DEBUG] Initializing WebGameInterface for session {session_id}")
+            self.session_id = session_id
+            self.app = app_instance
+            print(f"[DEBUG] Creating Game instance...")
+            self.game = Game()
+            print(f"[DEBUG] Game instance created successfully")
+            self.input_queue = queue.Queue()
+            self.output_buffer = []
+            self.waiting_for_input = False
+            print(f"[DEBUG] WebGameInterface initialization complete")
+        except Exception as e:
+            print(f"[ERROR] WebGameInterface initialization failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
     def capture_print(self, text):
         """Capture print output for web display"""
@@ -161,36 +189,50 @@ def index():
 @socketio.on('start_game')
 def handle_start_game():
     """Start a new game session"""
-    session_id = str(uuid.uuid4())
-    session['game_id'] = session_id
-    
-    # Create new game interface
-    game_interface = WebGameInterface(session_id, app)
-    active_games[session_id] = game_interface
-    
-    # Start game in background thread
-    def run_game_thread():
-        try:
-            print(f"[DEBUG] Starting game thread for session {session_id}")
-            game_interface.run_game()
-            print(f"[DEBUG] Game thread completed for session {session_id}")
-        except Exception as e:
-            print(f"[DEBUG] Game thread error for session {session_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            with app.app_context():
-                socketio.emit('game_error', {'error': str(e)}, room=session_id)
-        finally:
-            # Clean up session
-            print(f"[DEBUG] Cleaning up session {session_id}")
-            if session_id in active_games:
-                del active_games[session_id]
-    
-    thread = threading.Thread(target=run_game_thread)
-    thread.daemon = True
-    thread.start()
-    
-    emit('game_started', {'session_id': session_id})
+    try:
+        print(f"[DEBUG] Received start_game request")
+        session_id = str(uuid.uuid4())
+        session['game_id'] = session_id
+        
+        print(f"[DEBUG] Creating game interface for session {session_id}")
+        # Create new game interface
+        game_interface = WebGameInterface(session_id, app)
+        active_games[session_id] = game_interface
+        
+        print(f"[DEBUG] Starting game thread for session {session_id}")
+        # Start game in background thread
+        def run_game_thread():
+            try:
+                print(f"[DEBUG] Game thread started for session {session_id}")
+                game_interface.run_game()
+                print(f"[DEBUG] Game thread completed for session {session_id}")
+            except Exception as e:
+                print(f"[ERROR] Game thread error for session {session_id}: {e}")
+                import traceback
+                traceback.print_exc()
+                try:
+                    with app.app_context():
+                        socketio.emit('game_error', {'error': f'Game initialization error: {str(e)}'}, room=session_id)
+                except Exception as emit_error:
+                    print(f"[ERROR] Failed to emit error: {emit_error}")
+            finally:
+                # Clean up session
+                print(f"[DEBUG] Cleaning up session {session_id}")
+                if session_id in active_games:
+                    del active_games[session_id]
+        
+        thread = threading.Thread(target=run_game_thread)
+        thread.daemon = True
+        thread.start()
+        
+        print(f"[DEBUG] Emitting game_started for session {session_id}")
+        emit('game_started', {'session_id': session_id})
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to start game: {e}")
+        import traceback
+        traceback.print_exc()
+        emit('game_error', {'error': f'Failed to start game: {str(e)}'})
 
 @socketio.on('send_input')
 def handle_input(data):
@@ -216,6 +258,17 @@ def handle_disconnect():
         del active_games[session_id]
     print(f"Client disconnected: {request.sid}")
 
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    return {'status': 'ok', 'message': 'Terminal Souls is running'}
+
+# Serve static files properly
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return app.send_static_file(filename)
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    print(f"[DEBUG] Starting server on port {port}")
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)

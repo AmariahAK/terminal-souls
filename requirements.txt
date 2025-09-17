@@ -1,8 +1,8 @@
 torch
-pygame
-colorama
-numpy
 flask
 flask-socketio
 gunicorn
 eventlet
+pygame
+colorama
+numpy
