@@ -41,11 +41,13 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
 # Initialize SocketIO with proper configuration for Render
 socketio = SocketIO(app, 
                    cors_allowed_origins="*",
-                   logger=True,
-                   engineio_logger=True,
+                   logger=False,  # Disable to reduce noise
+                   engineio_logger=False,
                    async_mode='eventlet',
                    ping_timeout=60,
-                   ping_interval=25)
+                   ping_interval=25,
+                   transports=['polling', 'websocket'],
+                   always_connect=False)
 
 # Store active game sessions
 active_games = {}
@@ -108,10 +110,11 @@ class WebGameInterface:
     def run_game(self):
         """Run the game with web interface"""
         import sys
+        import builtins
         
-        # Monkey patch input and print for web
-        original_input = __builtins__['input']
-        original_print = __builtins__['print']
+        # Store original functions before patching
+        original_input = builtins.input
+        original_print = builtins.print
         original_stdout = sys.stdout
         
         def web_input(prompt=""):
@@ -134,11 +137,12 @@ class WebGameInterface:
             return result
         
         def web_print(*args, **kwargs):
-            # Capture the print output
+            # Capture the print output using the original print function
             output = StringIO()
             # Remove 'file' from kwargs if it exists to avoid conflict
             clean_kwargs = {k: v for k, v in kwargs.items() if k != 'file'}
-            print(*args, file=output, **clean_kwargs)
+            # Use original_print to avoid recursion
+            original_print(*args, file=output, **clean_kwargs)
             content = output.getvalue().rstrip('\n')
             if content:  # Only capture non-empty content
                 self.capture_print(content)
@@ -154,15 +158,23 @@ class WebGameInterface:
                 if text.strip():  # Only capture non-empty content
                     self.interface.capture_print(text.rstrip('\n'))
                     self.interface.send_output()
+                # Also write to original stdout for logging
+                try:
+                    original_stdout.write(text)
+                except:
+                    pass  # Ignore errors
                 return len(text)
                 
             def flush(self):
-                pass
+                try:
+                    original_stdout.flush()
+                except:
+                    pass
         
         try:
             # Replace both print and stdout
-            __builtins__['input'] = web_input
-            __builtins__['print'] = web_print
+            builtins.input = web_input
+            builtins.print = web_print
             sys.stdout = WebStdout(self)
             
             # Send initial game output
@@ -174,8 +186,8 @@ class WebGameInterface:
             
         finally:
             # Restore original functions
-            __builtins__['input'] = original_input
-            __builtins__['print'] = original_print
+            builtins.input = original_input
+            builtins.print = original_print
             sys.stdout = original_stdout
             
             # Send final output
