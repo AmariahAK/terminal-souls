@@ -67,16 +67,30 @@ class WebGameInterface:
         
         def web_input(prompt=""):
             self.send_output()  # Send any pending output first
-            return self.get_input(prompt)
+            if prompt:
+                self.capture_print(prompt)
+                self.send_output()
+            result = self.get_input()
+            # Clear processing state after receiving input
+            socketio.emit('clear_processing', room=self.session_id)
+            return result
         
         def web_print(*args, **kwargs):
             output = StringIO()
             print(*args, file=output, **kwargs)
-            self.capture_print(output.getvalue().strip())
+            content = output.getvalue().rstrip('\n')
+            if content:  # Only capture non-empty content
+                self.capture_print(content)
+                # Send output immediately for real-time display
+                self.send_output()
         
         try:
             __builtins__['input'] = web_input
             __builtins__['print'] = web_print
+            
+            # Send initial game output
+            self.capture_print("Initializing Terminal Souls...")
+            self.send_output()
             
             # Run the game
             self.game.run()

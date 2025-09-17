@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terminal Souls - AI-Orchestrated Psychological Horror</title>
+    <link rel="icon" type="image/png" href="/static/terminal_souls.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <style>
         body {
@@ -156,6 +157,7 @@
 <body>
     <div class="container">
         <div class="header">
+            <img src="/static/terminal_souls.png" alt="Terminal Souls" style="max-width: 200px; height: auto; margin-bottom: 10px;">
             <h1>🔥 TERMINAL SOULS 🔥</h1>
             <p>AI-Orchestrated Psychological Horror Roguelike</p>
             <p style="color: #ff6600;">The Entity compiles your fate. Every choice feeds its understanding.</p>
@@ -235,6 +237,10 @@
                 appendOutput(data.prompt);
             }
             input.focus();
+        });
+        
+        socket.on('clear_processing', function() {
+            updateStatus('Ready for next input...');
         });
         
         socket.on('game_ended', function() {
