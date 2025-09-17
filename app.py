@@ -58,15 +58,22 @@ class WebGameInterface:
     def get_input(self, prompt=""):
         """Get input from web client"""
         self.waiting_for_input = True
+        
+        # Debug: Log input request
+        print(f"[DEBUG] Emitting request_input with prompt: {prompt}")
+        
         with self.app.app_context():
             socketio.emit('request_input', {'prompt': prompt}, room=self.session_id)
         
         # Wait for input from client
         try:
+            print(f"[DEBUG] Waiting for input from queue...")
             user_input = self.input_queue.get(timeout=60)  # 60 second timeout
             self.waiting_for_input = False
+            print(f"[DEBUG] Got input from queue: {user_input}")
             return user_input
         except queue.Empty:
+            print(f"[DEBUG] Input timeout - no input received")
             self.waiting_for_input = False
             return ""
     
@@ -85,10 +92,17 @@ class WebGameInterface:
             if prompt:
                 self.capture_print(prompt)
                 self.send_output()
-            result = self.get_input()
+            
+            # Debug: Log that we're waiting for input
+            print(f"[DEBUG] Waiting for input with prompt: {prompt}")
+            
+            result = self.get_input(prompt)
             # Clear processing state after receiving input
             with self.app.app_context():
                 socketio.emit('clear_processing', room=self.session_id)
+            
+            # Debug: Log received input
+            print(f"[DEBUG] Received input: {result}")
             return result
         
         def web_print(*args, **kwargs):
@@ -157,12 +171,18 @@ def handle_start_game():
     # Start game in background thread
     def run_game_thread():
         try:
+            print(f"[DEBUG] Starting game thread for session {session_id}")
             game_interface.run_game()
+            print(f"[DEBUG] Game thread completed for session {session_id}")
         except Exception as e:
+            print(f"[DEBUG] Game thread error for session {session_id}: {e}")
+            import traceback
+            traceback.print_exc()
             with app.app_context():
                 socketio.emit('game_error', {'error': str(e)}, room=session_id)
         finally:
             # Clean up session
+            print(f"[DEBUG] Cleaning up session {session_id}")
             if session_id in active_games:
                 del active_games[session_id]
     
