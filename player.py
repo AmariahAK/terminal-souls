@@ -20,18 +20,9 @@ class Player:
             "vit": 10
         }
         
-        # Apply class bonuses
-        self.apply_class_bonuses()
-        
-        # Derived stats
-        self.health = self.stats["vit"] * 10
-        self.max_health = self.health
-        self.stamina = self.stats["end"] * 10
-        self.max_stamina = self.stamina
-        
-        # Game state
+        # Game state and metrics (initialize before class bonuses)
         self.floor = 1
-        self.ashlight = 50
+        self.ashlight = 0  # Start with 0 - players must earn their ashlight
         self.inventory = []
         self.equipped_weapon = None
         
@@ -39,6 +30,15 @@ class Player:
         self.sanity = 100.0  # Hidden stat, decreases with deaths/traps/betrayals
         self.predictability = 0.5  # Increases with repetitive actions
         self.deaths = 0
+        
+        # Apply class bonuses (after deaths is initialized)
+        self.apply_class_bonuses()
+        
+        # Derived stats
+        self.health = self.stats["vit"] * 10
+        self.max_health = self.health
+        self.stamina = self.stats["end"] * 10
+        self.max_stamina = self.stamina
         self.ally_count = 0
         self.flee_count = 0
         self.explore_count = 0

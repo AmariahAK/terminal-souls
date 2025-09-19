@@ -35,9 +35,8 @@ except ImportError:
         RESET_ALL = ""
 
 try:
-    # Set pygame environment variables for headless deployment
     import os
-    os.environ['SDL_AUDIODRIVER'] = 'dummy'
+    # Only set dummy video driver for headless systems (keep audio working)
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
     
     import pygame
