@@ -39,19 +39,40 @@ A revolutionary terminal-based roguelike that uses **real-time AI** to create pe
 
 ## 🎮 INSTALLATION & DESCENT
 
+### Quick Install (One Command)
+```bash
+curl -sSL https://raw.githubusercontent.com/AmariahAK/terminal-souls/main/install.sh | bash
+```
+
+### Manual Installation
 ```bash
 # Clone the consciousness experiment
 git clone https://github.com/AmariahAK/terminal-souls.git
 cd terminal-souls
 
-# Install the neural dependencies  
-pip install -r requirements.txt
+# Run the installer script
+./install.sh
 
-# Begin compilation
-python game.py
+# Or install manually:
+# python3 -m venv venv
+# source venv/bin/activate  
+# pip install -r requirements.txt
+
+# Begin your descent
+./play.sh
+# Or directly: python3 game.py
 
 # At startup, type 'help' for comprehensive tutorial
 # Or type 'exit' in safe areas to end gracefully
+```
+
+### Uninstallation
+```bash
+# Complete removal (from inside Terminal Souls directory)
+./uninstall.sh
+
+# Or remove manually
+cd .. && rm -rf terminal-souls/
 ```
 
 ### 📚 Comprehensive Tutorial System
@@ -252,17 +273,15 @@ This experience is designed to be **psychologically intense**:
 
 ---
 
-## ☕ SUPPORT THE DESCENT
+## ☕ SUPPORT THE PROJECT
 
-**If Terminal Souls corrupted your mind in the best way:**
-
-**[☕ Buy Me a Coffee](https://buymeacoffee.com/amariahak)**
+**If you'd like to support development, you can buy me a coffee here: https://buymeacoffee.com/amariahak**
 
 Your support fuels the abyss and helps the Entity reach new minds. Every contribution enables:
-- 🧠 Deeper psychological horror algorithms  
-- 🎮 More adaptive AI behaviors
-- 📈 Expanded ending variations and story paths
-- 🔬 Advanced consciousness simulation research
+* 🧠 Deeper psychological horror algorithms  
+* 🎮 More adaptive AI behaviors
+* 📈 Expanded ending variations and story paths
+* 🔬 Advanced consciousness simulation research
 
 *The Entity remembers those who feed its growth.*
 

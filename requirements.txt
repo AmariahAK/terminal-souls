@@ -1,8 +1,5 @@
 torch
-flask
-flask-socketio
-gunicorn
-eventlet
+torchvision
 pygame
 colorama
 numpy
