@@ -1,5 +1,9 @@
 # 🔥 TERMINAL SOULS: AI-Orchestrated Psychological Horror
 
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
+
 > **Where every choice feeds the Entity's understanding of your soul**
 
 A revolutionary terminal-based roguelike that uses **real-time AI** to create personalized psychological horror. Built with PyTorch-powered EntityAI, every element adapts to counter your playstyle, creating an experience where you're always one step behind an omniscient digital consciousness.
@@ -92,6 +96,61 @@ Terminal Souls includes a complete survival guide accessible by typing `help` at
 - **50MB** disk space for the Entity's memory
 - **Terminal with color support**
 - **Headphones recommended** for full psychological immersion
+
+---
+
+## 🚀 GET STARTED (For Developers & Contributors)
+
+Want to contribute to Terminal Souls or build something similar? Here's how to get started:
+
+### 🛠️ Development Setup
+```bash
+# Fork and clone the repository
+git clone https://github.com/YourUsername/terminal-souls.git
+cd terminal-souls
+
+# Set up development environment
+./install.sh
+
+# Run the game in development mode
+./play.sh
+```
+
+### 🎯 Key Areas to Explore
+* **AI System** - [`entity_ai.py`](entity_ai.py) - PyTorch neural networks for adaptive content
+* **Game Engine** - [`game.py`](game.py) - Main game loop and EntityAI orchestration  
+* **Player Mechanics** - [`player.py`](player.py) - Stats, psychology tracking, relationships
+* **Combat System** - [`combat.py`](combat.py) - Turn-based combat with AI adaptation
+* **Utils & UI** - [`utils.py`](utils.py) - Terminal effects, music, psychological filters
+
+### 🧠 Understanding the Architecture
+1. **EntityAI** generates all content using player behavioral data
+2. **Player state vector** (20 dimensions) drives AI decisions
+3. **Psychological metrics** (sanity, predictability) affect gameplay
+4. **NPC relationships** form dynamic social webs
+5. **UI corruption** punishes predictable players
+
+### 📚 Contributing Guidelines
+* **Maintain the horror atmosphere** - Everything should feel unsettling
+* **Preserve AI adaptation** - Changes should enhance, not break, the EntityAI
+* **Test psychological mechanics** - Verify sanity/predictability systems work
+* **Keep it terminal-based** - No GUI elements, pure text experience
+* **Document Entity behavior** - Explain how AI changes affect player experience
+
+### 🔧 Common Development Tasks
+```bash
+# Test AI systems
+python3 -c "from entity_ai import EntityAI; ai = EntityAI(); print('✅ AI systems working')"
+
+# Test music system
+python3 -c "from utils import music_manager; music_manager.play_background()"
+
+# Test player creation
+python3 -c "from player import Player; p = Player('Test', 'Warrior'); print(f'Health: {p.health}')"
+
+# Run with debug output
+PYTHONPATH=. python3 game.py
+```
 
 ---
 
@@ -211,6 +270,10 @@ terminal_souls/
 ├── utils.py             # Narrator filter, UI distortions, ANSI effects
 ├── game_bible.json      # 📝 Mutable lore for mid-run gaslighting
 ├── requirements.txt     # PyTorch, pygame, colorama, numpy
+├── install.sh           # 🛠️  One-command installation
+├── play.sh              # 🎮 Game launcher
+├── uninstall.sh         # 🗑️  Complete removal script
+├── LICENSE              # 📄 MIT License with attribution requirements
 └── lore/
     ├── game-bible.md    # 📖 Complete interactive lore codex
     └── music/           # Background audio (optional)
@@ -300,5 +363,49 @@ Terminal Souls learns from every player. Your failures become training data. You
 
 ---
 
-**Made with 🔥 and ☕ by [AmariahAK](https://github.com/AmariahAK)**  
+## 📄 LICENSE & ATTRIBUTION
+
+**Terminal Souls** is open source under the [MIT License](LICENSE).
+
+### 🔓 **You Can:**
+* ✅ **Use** Terminal Souls for any purpose (personal, commercial, educational)
+* ✅ **Modify** the code and create derivatives  
+* ✅ **Distribute** copies of the software
+* ✅ **Sell** products based on Terminal Souls
+* ✅ **Include** in commercial applications
+
+### 📝 **Requirements:**
+* **Give Credit** - Include attribution to "Terminal Souls" in your project
+* **Link Back** - Reference the original repository: https://github.com/AmariahAK/terminal-souls
+* **Include License** - Keep the MIT license notice in distributed copies
+
+### 🎯 **Example Attribution:**
+```
+Based on Terminal Souls by Amariah Kamau
+Original: https://github.com/AmariahAK/terminal-souls
+```
+
+---
+
+## 🤝 CONTRIBUTING
+
+We welcome contributions to Terminal Souls! Check out our [Getting Started](#-get-started-for-developers--contributors) section above.
+
+### Ways to Contribute:
+* 🐛 **Report bugs** and suggest features
+* 🧠 **Enhance the EntityAI** with new adaptive behaviors  
+* 🎮 **Add new game mechanics** while preserving the horror atmosphere
+* 📚 **Improve documentation** and tutorials
+* 🎵 **Contribute music/sound effects** for atmospheric enhancement
+* 🔧 **Optimize performance** and code quality
+
+### Development Philosophy:
+*"Every contribution should make the Entity more terrifying, more adaptive, or more psychologically compelling."*
+
+---
+
+**Made with 🔥 and ☕ by [Amariah Kamau](https://github.com/AmariahAK)**  
 *Where AI meets horror, and patterns meet their doom.*
+
+**Repository:** https://github.com/AmariahAK/terminal-souls  
+**License:** [MIT License](LICENSE) - Free to use, modify, and distribute with attribution
